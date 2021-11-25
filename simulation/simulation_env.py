@@ -7,7 +7,7 @@ import threading
 
 class SimulationEnv:
     def __init__(
-        self, size, num_discs, num_beacons, mode="def", auto=False, animate=False
+        self, size, num_discs, num_beacons, mode="def", auto=False, animate=False, p_filter=None
     ):
         """
         Initializes the simulation environment
@@ -27,6 +27,10 @@ class SimulationEnv:
         # parameters of the process model
         self.spring_force_ = 0.5
         self.drag_force_ = 0.0075
+
+        if p_filter:
+            self.particle_filter = p_filter
+            self.particles = p_filter.get_particles()
 
         # auto process steps
         self.auto_ = auto
@@ -120,7 +124,9 @@ class SimulationEnv:
         """
         Calculates the next state of the discs.
         """
-        self.discs_ = self._process_model(self.discs_, dt)
+        for disc_num in range(self.num_discs_):
+            self.discs_ = self._process_model(self.discs_, dt)
+        self.estimate = self.particle_filter.run(self.beacons_, self.get_distance(-1))
 
     def get_reading(self, beacon_num):
         """
@@ -156,9 +162,14 @@ class SimulationEnv:
         noise = np.random.normal(loc=0.0, scale=0.1, size=self.num_beacons_)
 
         dists = []
-        for disc_num in range(self.num_discs_):
-            pos = self.discs_[disc_num][:2] - self.beacons_[beacon_num]
-            dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
+        if beacon_num != -1:
+            for disc_num in range(self.num_discs_):
+                pos = self.discs_[disc_num][:2] - self.beacons_[beacon_num]
+                dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
+        else:
+            for beacon in self.beacons_:
+                pos = self.discs_[0][:2] - beacon
+                dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
         return np.asarray(dists + noise)
 
     def get_beacons_pos(self):
