@@ -6,8 +6,8 @@ from models.observation_model import ObservationModel
 if __name__ == "__main__":
     dynamics_model = MotionModel(4, 200)
     observation_model = ObservationModel(2, 200)
-    particle_filter = ParticleFilter(500, 4, 200, dynamics_model, observation_model)
-    test_env = SimulationEnv(200, 1, 3, wrap=True, auto=True, animate=True, p_filter=particle_filter)
+    particle_filter = ParticleFilter(100000, 4, 200, dynamics_model, observation_model)
+    test_env = SimulationEnv(200, 1, 2, mode="collide", auto=True, animate=True, p_filter=particle_filter)
 
     #print(particle_filter.particles)
     particle_filter.predict()
