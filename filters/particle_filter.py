@@ -13,18 +13,18 @@ class ParticleFilter:
         self.particles = np.empty((num_particles, state_dimension))
         # distribute particles randomly with uniform weights
         self.weights = np.full(num_particles, 1.0 / num_particles)
-        self.particles[:, 0] = np.random.uniform(0, 2 * env_size, size=num_particles)
-        self.particles[:, 1] = np.random.uniform(0, 2 * env_size, size=num_particles)
-        self.particles[:, 2] = np.random.uniform(0, 3, size=num_particles)
+        self.particles[:, 0] = np.random.uniform(0, env_size, size=num_particles)
+        self.particles[:, 1] = np.random.uniform(0, env_size, size=num_particles)
+        self.particles[:, 2] = np.random.normal(loc=0.0, scale=1.0, size=num_particles) * 3  #np.random.uniform(0, 50, size=num_particles)
         self.particles[:, 3] = np.random.uniform(0, 2 * np.pi, size=num_particles)
 
-        self.estimate = self._estimate()
+        self._estimate()
 
     def run(self, beacons, distances):
         self._predict()
         self._update(beacons, distances)
-        self._resample()
-        return self._estimate()
+        self._resample_low_variance()
+        self._estimate()
 
     def _predict(self):
         """
@@ -51,34 +51,26 @@ class ParticleFilter:
         #print(disc_distances)
         #print(distance - disc_distances)
         error = np.linalg.norm(distance - disc_distances, axis=1)
+        print(error[error < 1])
         #print(error)
         #print(error.shape)
         """
         pdf = stats.norm(distance - disc_distances, 0.1)
         print(pdf)"""
 
-        self.weights = self.weights * stats.norm(0.0, 0.64).pdf(error)
-        #print(self.weights)
+        self.weights = self.weights * stats.norm(0.0, 0.64).pdf(error)  # TODO: + or *?
+        print(self.weights[self.weights >= 1.0e-5])
 
-        self.weights += 1.e-300  # avoid round-off to zero
+        self.weights += 1.0e-8  # avoid round-off to zero  # TODO: 1e-300 or -12 or -8?
         self.weights /= sum(self.weights)  # normalize
 
-    def _resample(self):
-        # TODO re-think implementation
-        """cumulative_sum = np.cumsum(self.weights)
-        cumulative_sum[-1] = 1.0  # avoid round-off error
-        indexes = np.searchsorted(cumulative_sum, np.random.random(self.num_particles))
-
-        # resample according to indexes
-        self.particles[:] = self.particles[indexes]
-        self.weights.resize(len(self.particles))
-        self.weights.fill(1.0 / self.num_particles)"""
-
+    def _resample_low_variance(self):
+        # TODO diverges for some reason..
         new_particles = []
 
         r = np.random.uniform(low=0.0, high=1.0 / self.num_particles)
         c = self.weights[0]
-        i = 1
+        i = 0
         for m in range(self.num_particles):
             u = r + (m - 1) / self.num_particles
             while u > c:
@@ -100,7 +92,10 @@ class ParticleFilter:
         var = np.average((pos - mean)**2, weights=self.weights, axis=0)
         #print(mean)
         #print(var)
-        return mean, var
+        self.estimate = mean, var
 
     def get_particles(self):
         return self.particles
+
+    def get_estimate(self):
+        return self.estimate
