@@ -19,13 +19,21 @@ class MotionModel:
 
         vel_x = particle_states[:, 2] * np.cos(particle_states[:, 3])
         vel_y = particle_states[:, 2] * np.sin(particle_states[:, 3])
-        predicted_particle_states[:, 0] = particle_states[:, 0] + vel_x
-        predicted_particle_states[:, 1] = particle_states[:, 1] + vel_y
+        predicted_particle_states[:, 0] += vel_x
+        predicted_particle_states[:, 1] += vel_y
 
-        #predicted_particle_states[predicted_particle_states[:, 0] > 2 * self.env_size] = predicted_particle_states[predicted_particle_states[:, 0] > 2 * self.env_size] - 2 * self.env_size
-        #predicted_particle_states[predicted_particle_states[:, 0] < 0] = 2 * self.env_size - predicted_particle_states[predicted_particle_states[:, 0] < 0]
 
-        #predicted_particle_states[predicted_particle_states[:, 1] > 2 * self.env_size] = predicted_particle_states[predicted_particle_states[:, 1] > 2 * self.env_size] - 2 * self.env_size
-        #predicted_particle_states[predicted_particle_states[:, 1] < 0] = 2 * self.env_size - predicted_particle_states[predicted_particle_states[:, 1] < 0]
+        out_left = predicted_particle_states[:, 0] < 0
+        out_right = predicted_particle_states[:, 0] > self.env_size
+        out_bottom = predicted_particle_states[:, 1] < 0
+        out_top = predicted_particle_states[:, 1] > self.env_size
+
+        if True:
+            predicted_particle_states[out_left, 0] = 0
+            predicted_particle_states[out_right, 0] = self.env_size
+            predicted_particle_states[out_bottom, 1] = 0
+            predicted_particle_states[out_top, 1] = self.env_size
+            predicted_particle_states[out_left | out_right, 3] = np.arctan(vel_y[out_left | out_right] / (-vel_x[out_left | out_right]))
+            predicted_particle_states[out_top | out_bottom, 3] = np.arctan(-vel_y[out_top | out_bottom] / vel_x[out_top | out_bottom])
 
         return predicted_particle_states
