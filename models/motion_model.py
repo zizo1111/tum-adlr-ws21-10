@@ -1,4 +1,3 @@
-import numpy
 import numpy as np
 
 
@@ -7,18 +6,26 @@ class MotionModel:
         self.state_dimension = state_dimension
         self.env_size = env_size
 
-    def forward(self, states: np.ndarray, controls: np.ndarray = None) -> np.ndarray:
-        predicted_states = states
+    def forward(self, particle_states: np.ndarray, controls: np.ndarray = None, noise: np.ndarray = None) -> np.ndarray:
+        if not noise:
+            noise = np.random.normal(loc=0.0, scale=0.1, size=self.state_dimension)
 
-        vel_x = states[:, 2] * np.cos(states[:, 3])
-        vel_y = states[:, 2] * np.sin(states[:, 3])
-        predicted_states[:, 0] = states[:, 0] + vel_x
-        predicted_states[:, 1] = states[:, 1] + vel_y
+        predicted_particle_states = particle_states + noise
 
-        predicted_states[predicted_states[:, 0] > 2 * self.env_size] = predicted_states[predicted_states[:, 0] > 2 * self.env_size] - 2 * self.env_size
-        predicted_states[predicted_states[:, 0] < 0] = 2 * self.env_size - predicted_states[predicted_states[:, 0] < 0]
+        #print(particle_states)
+        #print(noise)
+        #print(predicted_particle_states)
+        #print("--------------------------------")
 
-        predicted_states[predicted_states[:, 1] > 2 * self.env_size] = predicted_states[predicted_states[:, 1] > 2 * self.env_size] - 2 * self.env_size
-        predicted_states[predicted_states[:, 1] < 0] = 2 * self.env_size - predicted_states[predicted_states[:, 1] < 0]
+        vel_x = particle_states[:, 2] * np.cos(particle_states[:, 3])
+        vel_y = particle_states[:, 2] * np.sin(particle_states[:, 3])
+        predicted_particle_states[:, 0] = particle_states[:, 0] + vel_x
+        predicted_particle_states[:, 1] = particle_states[:, 1] + vel_y
 
-        return predicted_states
+        #predicted_particle_states[predicted_particle_states[:, 0] > 2 * self.env_size] = predicted_particle_states[predicted_particle_states[:, 0] > 2 * self.env_size] - 2 * self.env_size
+        #predicted_particle_states[predicted_particle_states[:, 0] < 0] = 2 * self.env_size - predicted_particle_states[predicted_particle_states[:, 0] < 0]
+
+        #predicted_particle_states[predicted_particle_states[:, 1] > 2 * self.env_size] = predicted_particle_states[predicted_particle_states[:, 1] > 2 * self.env_size] - 2 * self.env_size
+        #predicted_particle_states[predicted_particle_states[:, 1] < 0] = 2 * self.env_size - predicted_particle_states[predicted_particle_states[:, 1] < 0]
+
+        return predicted_particle_states
