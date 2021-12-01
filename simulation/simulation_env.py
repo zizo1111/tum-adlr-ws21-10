@@ -102,7 +102,11 @@ class SimulationEnv:
         out_bottom = new_state[:, 1] < 0
         out_top = new_state[:, 1] > self.env_size_
 
+<<<<<<< HEAD:simulation/simulation_env.py
         if self.mode_ == "collide":
+=======
+        if self.mode == "collide":
+>>>>>>> ffaea40 (Add noise to sim env, reduce velocity, fix bug in collision, and increase step to 1):simulation_env.py
             new_state[out_left, 0] = 0
             new_state[out_right, 0] = self.env_size_
             new_state[out_bottom, 1] = 0
@@ -126,7 +130,7 @@ class SimulationEnv:
         """
         for disc_num in range(self.num_discs_):
             self.discs_ = self._process_model(self.discs_, dt)
-        self.estimate = self.particle_filter.run(self.beacons_, self.get_distance(-1))
+        self.particle_filter.run(self.beacons_, self.get_distance(-1))
 
     def get_reading(self, beacon_num):
         """
