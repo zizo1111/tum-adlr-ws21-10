@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from animation import Animator
-import matplotlib.animation as animation
 import math
+import threading
 
 
 class SimulationEnv:
@@ -29,7 +29,7 @@ class SimulationEnv:
         self.drag_force_ = 0.0075
 
         # auto process steps
-        self.auto = auto
+        self.auto_ = auto
 
         # wrap the environment
         self.mode_ = mode
@@ -58,10 +58,18 @@ class SimulationEnv:
                 beacons_.append(np.array([x_pos, y_pos]))
         self.beacons_ = np.array(beacons_)
 
-        # initialize animation
         self.animate_ = animate
+        # start auto run thread
+        self.anim_start_ = False
+        if self.auto_:
+            self.lock_ = threading.Lock()
+            self.auto_run(1)
+
+        # initialize animation
         if self.animate_:
-            self.animator = Animator(self.env_size_, self.beacons_)
+            self.animator_ = Animator(self.env_size_, self.beacons_)
+            self.anim_start_ = True
+            plt.show()
 
     def get_discs(self):
         return np.array(self.discs_)
@@ -104,9 +112,8 @@ class SimulationEnv:
             new_state[out_left, 1] = self.env_size_ - new_state[:, 1]
             new_state[out_right, 1] = new_state[:, 1] - self.env_size_
 
-        if self.animate_:
-            self.animator.set_data(new_state)
-
+        if self.animate_ and not self.auto_:
+            self.animator_.set_data(new_state)
         return new_state
 
     def update_step(self, dt):
@@ -161,7 +168,9 @@ class SimulationEnv:
         return self.beacons_
 
     def get_setup(self):
-
+        """
+        returns the simulation eviroment settings
+        """
         return np.asarray(
             [
                 self.env_size_,
@@ -173,51 +182,16 @@ class SimulationEnv:
             dtype=object,
         )
 
-    # def init_anim(self):
-    #     """initialize animation"""
-    #     # set up figure and animation
-
-    #     self.fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    #     fig_size = self.env_size_ + 100
-    #     self.ax = self.fig.add_subplot(
-    #         5,
-    #         1,
-    #         (1, 4),
-    #         aspect="equal",
-    #         autoscale_on=True,
-    #         xlim=(0, self.env_size_),
-    #         ylim=(0, self.env_size_),
-    #     )
-
-    #     # discs_vis holds the locations of the discs
-    #     (self.discs_vis,) = self.ax.plot([], [], "bo", ms=6)
-
-    #     # beacons drawn as red dots
-    #     (self.beacons_vis,) = self.ax.plot([], [], "ro", ms=6)
-    #     self.beacons_vis.set_data(self.beacons_[:, 0], self.beacons_[:, 1])
-
-    #     # rect is the box edge
-    #     self.rect = plt.Rectangle(
-    #         (0, 0), self.env_size_, self.env_size_, ec="none", lw=2, fc="none"
-    #     )
-
-    #     self.ax.add_patch(self.rect)
-    #     self.discs_vis.set_data([], [])
-    #     self.rect.set_edgecolor("none")
-
-    #     return self.discs_vis, self.rect
-
-    # def animate(self, i):
-    #     """perform animation step"""
-    #     if self.auto:
-    #         # update step
-    #         self.update_step(1)
-
-    #     # update discs_vis the animation
-    #     self.rect.set_edgecolor("k")
-    #     self.discs_vis.set_data(self.get_discs()[:, 0], self.get_discs()[:, 1])
-
-    #     return self.discs_vis, self.rect
+    def auto_run(self, dt):
+        """
+        auto runs the simulation enviroment, and updates the step regualry
+        """
+        self.auto_thread_ = threading.Timer(dt / 10, self.auto_run, args=[dt])
+        self.auto_thread_.start()
+        with self.lock_:
+            self.update_step(dt)
+            if self.anim_start_ and self.animate_:
+                self.animator_.set_data(self.get_discs())
 
 
 if __name__ == "__main__":

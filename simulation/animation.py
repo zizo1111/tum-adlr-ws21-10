@@ -1,4 +1,3 @@
-from typing import no_type_check
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -7,6 +6,7 @@ import matplotlib.animation as animation
 class Animator:
     def __init__(self, size, beacons, plot_particles=False, plot_estimates=False):
         self.env_size_ = size
+        # plt.ion()
         self.fig = plt.figure()
 
         self.beacons_ = beacons
@@ -23,7 +23,7 @@ class Animator:
             blit=True,
             init_func=self.init_anim,
         )
-        plt.show()
+        plt.show(block=False)
 
     def init_anim(self):
         """initialize animation"""
