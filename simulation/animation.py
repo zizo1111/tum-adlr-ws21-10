@@ -42,7 +42,7 @@ class Animator:
         )
 
         # discs_vis holds the locations of the discs
-        (self.discs_vis,) = self.ax.plot([], [], "bo", ms=6)
+        (self.discs_vis,) = self.ax.plot([], [], "ko", ms=6)
 
         # beacons drawn as red dots
         (self.beacons_vis,) = self.ax.plot([], [], "ro", ms=6)

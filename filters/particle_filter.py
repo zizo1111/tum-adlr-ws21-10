@@ -23,7 +23,7 @@ class ParticleFilter:
     def run(self, beacons, distances, dt):
         self._predict(dt)
         self._update(beacons, distances)
-        self._resample_low_variance()
+        self._resample_residual()
         self._estimate()
 
     def _predict(self, dt):
@@ -51,21 +51,21 @@ class ParticleFilter:
         #print(disc_distances)
         #print(distance - disc_distances)
         error = np.linalg.norm(distance - disc_distances, axis=1)
-        print(error[error < 1])
         #print(error)
         #print(error.shape)
         """
         pdf = stats.norm(distance - disc_distances, 0.1)
         print(pdf)"""
 
-        self.weights = self.weights * stats.norm(0.0, 0.64).pdf(error)  # TODO: + or *?
-        print(self.weights[self.weights >= 1.0e-5])
+        for i, b in enumerate(beacons):
+            self.weights = self.weights * stats.norm(0.0, 10.0).pdf(np.abs(distance[:, i] - disc_distances[i]))
 
-        self.weights += 1.0e-8  # avoid round-off to zero  # TODO: 1e-300 or -12 or -8?
+        ###self.weights = self.weights * stats.norm(0.0, 10.0).pdf(error)  # TODO: + or *?
+
+        self.weights += 1.e-8  # avoid round-off to zero  # TODO: 1e-300 or -12 or -8?
         self.weights /= sum(self.weights)  # normalize
 
     def _resample_low_variance(self):
-        # TODO diverges for some reason..
         new_particles = []
 
         r = np.random.uniform(low=0.0, high=1.0 / self.num_particles)
@@ -80,6 +80,59 @@ class ParticleFilter:
 
         self.particles = np.array(new_particles)
         self.weights.fill(1.0 / self.num_particles)
+
+    def _resample_residual(self):
+        indices = np.zeros(self.num_particles).astype(int)
+
+        # allocate ⌊N*w⌋ copies of each particle
+        num_copies = np.floor(self.num_particles * self.weights).astype(int)
+        k = 0
+        for i in range(self.num_particles):
+            for _ in range(num_copies[i]):  # make the copies
+                indices[k] = i
+                k += 1
+        assert k == np.sum(num_copies)
+
+        # compute the residual (to be resampled)
+        residual = self.num_particles * self.weights - num_copies  # get fractional part
+        residual /= sum(residual)  # normalize
+
+        # either use multinomial resampling to allocate the rest
+        # -> maximizes the variance of the samples
+        indices = self.__multinomial(indices, residual, k)
+
+        # or use stratified resampling
+        #indices = self.__stratified(indices, residual, k)
+
+        self.particles[:] = self.particles[indices]
+        self.weights.fill(1.0 / len(self.weights))
+
+        assert len(self.particles) == self.num_particles
+
+    def __multinomial(self, indices, residual, k):
+        cumulative_sum = np.cumsum(residual)
+        cumulative_sum[-1] = 1.0  # ensure sum is exactly one
+        indices[k:self.num_particles] = np.searchsorted(cumulative_sum, np.random.random(self.num_particles - k))
+
+        return indices
+
+    def __stratified(self, indices, residual, k):
+        # TODO: check for correctness
+        # make N subdivisions (of the residual interval!),
+        # and chose a random position within each one
+        positions = (np.random.random(self.num_particles - k) + range(self.num_particles - k)) / (self.num_particles - k)
+
+        cumulative_sum = np.cumsum(residual)
+        cumulative_sum[-1] = 1.0  # ensure sum is exactly one
+        i, j = 0, 0
+        while i < self.num_particles - k:  # allocate rest
+            if positions[i] < cumulative_sum[j]:
+                indices[k + i] = j
+                i += 1
+            else:
+                j += 1
+
+        return indices
 
     def _estimate(self):
         """
