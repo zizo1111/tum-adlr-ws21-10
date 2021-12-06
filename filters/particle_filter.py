@@ -20,19 +20,19 @@ class ParticleFilter:
 
         self._estimate()
 
-    def run(self, beacons, distances):
-        self._predict()
+    def run(self, beacons, distances, dt):
+        self._predict(dt)
         self._update(beacons, distances)
         self._resample_low_variance()
         self._estimate()
 
-    def _predict(self):
+    def _predict(self, dt):
         """
         Prediction step of Particle filter
 
         :return: New set of particles after applying motion model
         """
-        self.particles = self.motion_model.forward(self.particles)
+        self.particles = self.motion_model.forward(self.particles, dt)
 
     def _update(self, beacons, disc_distances):
         """

@@ -1,4 +1,4 @@
-from simulation_env import SimulationEnv
+from simulation.simulation_env import SimulationEnv
 from filters.particle_filter import ParticleFilter
 from models.motion_model import MotionModel
 from models.observation_model import ObservationModel

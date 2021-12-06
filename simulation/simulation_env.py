@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from animation import Animator
+from simulation.animation import Animator
 import math
 import threading
 
@@ -71,7 +71,8 @@ class SimulationEnv:
 
         # initialize animation
         if self.animate_:
-            self.animator_ = Animator(self.env_size_, self.beacons_)
+            self.animator_ = Animator(self.env_size_, self.beacons_, True, True)
+            self.animator_.set_data(self.discs_, self.particle_filter.get_particles(), self.particle_filter.get_estimate())
             self.anim_start_ = True
             plt.show()
 
@@ -102,11 +103,7 @@ class SimulationEnv:
         out_bottom = new_state[:, 1] < 0
         out_top = new_state[:, 1] > self.env_size_
 
-<<<<<<< HEAD:simulation/simulation_env.py
         if self.mode_ == "collide":
-=======
-        if self.mode == "collide":
->>>>>>> ffaea40 (Add noise to sim env, reduce velocity, fix bug in collision, and increase step to 1):simulation_env.py
             new_state[out_left, 0] = 0
             new_state[out_right, 0] = self.env_size_
             new_state[out_bottom, 1] = 0
@@ -121,7 +118,7 @@ class SimulationEnv:
             new_state[out_right, 1] = new_state[:, 1] - self.env_size_
 
         if self.animate_ and not self.auto_:
-            self.animator_.set_data(new_state)
+            self.animator_.set_data(new_state, self.particle_filter.get_particles(), self.particle_filter.get_estimate())
         return new_state
 
     def update_step(self, dt):
@@ -130,7 +127,7 @@ class SimulationEnv:
         """
         for disc_num in range(self.num_discs_):
             self.discs_ = self._process_model(self.discs_, dt)
-        self.particle_filter.run(self.beacons_, self.get_distance(-1))
+        self.particle_filter.run(self.beacons_, self.get_distance(-1), dt)
 
     def get_reading(self, beacon_num):
         """
@@ -206,7 +203,7 @@ class SimulationEnv:
         with self.lock_:
             self.update_step(dt)
             if self.anim_start_ and self.animate_:
-                self.animator_.set_data(self.get_discs())
+                self.animator_.set_data(self.get_discs(), self.particle_filter.get_particles(), self.particle_filter.get_estimate())
 
 
 if __name__ == "__main__":

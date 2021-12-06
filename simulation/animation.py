@@ -84,7 +84,6 @@ class Animator:
         return self.discs_vis, self.particles_vis, self.estimate_vis, self.rect
 
     def set_data(self, discs, particles=None, estimates=None):
-
         self.discs_ = discs
         if self.plot_particles and particles is not None:
             self.particles_ = particles
