@@ -12,11 +12,6 @@ class MotionModel:
 
         predicted_particle_states = particle_states + noise
 
-        #print(particle_states)
-        #print(noise)
-        #print(predicted_particle_states)
-        #print("--------------------------------")
-
         vel_x = particle_states[:, 2] * np.cos(particle_states[:, 3])
         vel_y = particle_states[:, 2] * np.sin(particle_states[:, 3])
         predicted_particle_states[:, 0] += vel_x * dt

@@ -15,7 +15,4 @@ class ObservationModel:
 
         measured_distances = np.reshape(np.linalg.norm(r_a - r_b, axis=1) + noise, (len(particle_positions), len(beacon_positions)))
 
-        #print(measured_distances)
-        #print(measured_distances.shape)
-
         return measured_distances

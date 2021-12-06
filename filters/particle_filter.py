@@ -15,7 +15,7 @@ class ParticleFilter:
         self.weights = np.full(num_particles, 1.0 / num_particles)
         self.particles[:, 0] = np.random.uniform(0, env_size, size=num_particles)
         self.particles[:, 1] = np.random.uniform(0, env_size, size=num_particles)
-        self.particles[:, 2] = np.random.normal(loc=0.0, scale=1.0, size=num_particles) * 3  #np.random.uniform(0, 50, size=num_particles)
+        self.particles[:, 2] = np.random.normal(loc=0.0, scale=1.0, size=num_particles) * 3
         self.particles[:, 3] = np.random.uniform(0, 2 * np.pi, size=num_particles)
 
         self._estimate()
@@ -41,26 +41,18 @@ class ParticleFilter:
         :param disc_distances:
         :return:
         """
-        ##distance = np.linalg.norm(self.particles[:, 0:2] - beacons[0], axis=1)
         distance = self.observation_model.measure(self.particles[:, 0:2], beacons)
-        for i, beacon in enumerate(beacons):
-            d = np.linalg.norm(self.particles[:, 0:2] - beacon, axis=1)
-            ##distance = np.vstack((distance, d))
-        ##distance = np.linalg.norm(distance.T - disc_distances, axis=1)
-            #self.weights *= stats.norm(d, 0.1).pdf(disc_distances[i])
-        #print(disc_distances)
-        #print(distance - disc_distances)
-        error = np.linalg.norm(distance - disc_distances, axis=1)
-        #print(error)
-        #print(error.shape)
-        """
-        pdf = stats.norm(distance - disc_distances, 0.1)
-        print(pdf)"""
 
+        # either use the overall error (L2-norm) of all distances to beacons to identify,
+        # how well each particle matches the measurement...
+        # <-> means "we don't distinguish between beacons"
+        error = np.linalg.norm(distance - disc_distances, axis=1)
+        #self.weights = self.weights * stats.norm(0.0, 10.0).pdf(error)  # TODO: + or *?
+
+        # ...or use the distance to each beacon to provide individual likelihood, all of which will be 'merged' then
+        # <-> means "each beacon is distinguishable"
         for i, b in enumerate(beacons):
             self.weights = self.weights * stats.norm(0.0, 10.0).pdf(np.abs(distance[:, i] - disc_distances[i]))
-
-        ###self.weights = self.weights * stats.norm(0.0, 10.0).pdf(error)  # TODO: + or *?
 
         self.weights += 1.e-8  # avoid round-off to zero  # TODO: 1e-300 or -12 or -8?
         self.weights /= sum(self.weights)  # normalize
@@ -97,11 +89,11 @@ class ParticleFilter:
         residual = self.num_particles * self.weights - num_copies  # get fractional part
         residual /= sum(residual)  # normalize
 
-        # either use multinomial resampling to allocate the rest
+        # either use multinomial resampling to allocate the rest...
         # -> maximizes the variance of the samples
         indices = self.__multinomial(indices, residual, k)
 
-        # or use stratified resampling
+        # ...or use stratified resampling
         #indices = self.__stratified(indices, residual, k)
 
         self.particles[:] = self.particles[indices]
@@ -143,8 +135,6 @@ class ParticleFilter:
         pos = self.particles[:, 0:self.state_dimension]
         mean = np.average(pos, weights=self.weights, axis=0)
         var = np.average((pos - mean)**2, weights=self.weights, axis=0)
-        #print(mean)
-        #print(var)
         self.estimate = mean, var
 
     def get_particles(self):
