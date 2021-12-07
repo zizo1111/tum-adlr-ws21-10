@@ -8,7 +8,7 @@ class MotionModel:
 
     def forward(self, particle_states: np.ndarray, controls: np.ndarray = None, noise: np.ndarray = None, dt: float = 1.0) -> np.ndarray:
         if not noise:
-            noise = np.random.normal(loc=0.0, scale=0.1, size=self.state_dimension)
+            noise = np.random.normal(loc=0.0, scale=0.1, size=particle_states.shape)
 
         predicted_particle_states = particle_states + noise
 
