@@ -8,8 +8,19 @@ class MotionModel:
         self.mode = mode
 
     def forward(self, particle_states: np.ndarray, controls: np.ndarray = None, noise: np.ndarray = None, dt: float = 1.0) -> np.ndarray:
+        """
+        Propagates particle/disc states according to the motion model chosen for one time step dt
+
+        :param particle_states: Particle states of dimension = self.state_dimension
+        :param controls: Control values (if present)
+        :param noise: Special type of noise; if not given: use default zero-mean Gaussian noise with std=0.1
+        :param dt: Time step
+        :return: New predicted particle states (propagated dt time steps)
+        """
         if not noise:
             noise = np.random.normal(loc=0.0, scale=0.1, size=particle_states.shape)
+        else:
+            assert noise.shape == particle_states.shape
 
         predicted_particle_states = particle_states + noise
 

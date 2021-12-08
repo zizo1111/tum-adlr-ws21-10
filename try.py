@@ -4,7 +4,37 @@ from models.motion_model import MotionModel
 from models.observation_model import ObservationModel
 
 if __name__ == "__main__":
-    dynamics_model = MotionModel(4, 200)
-    observation_model = ObservationModel(2, 200)
-    particle_filter = ParticleFilter(10000, 4, 200, dynamics_model, observation_model)
-    test_env = SimulationEnv(200, 1, 2, mode="collide", auto=True, animate=True, p_filter=particle_filter)
+    # General configuration #
+    state_dim = 4
+    env_size = 200
+    mode = "collide"
+
+    # PF config #
+    num_particles = 5000
+
+    # Environment config #
+    num_discs = 1
+    num_beacons = 2
+
+    dynamics_model = MotionModel(
+        state_dimension=state_dim, env_size=env_size, mode=mode
+    )
+    observation_model = ObservationModel(
+        state_dimension=2, env_size=env_size
+    )  # we can only measure distances to beacons -> only position is needed
+    particle_filter = ParticleFilter(
+        num_particles=num_particles,
+        state_dimension=state_dim,
+        env_size=env_size,
+        motion_model=dynamics_model,
+        observation_model=observation_model,
+    )
+    test_env = SimulationEnv(
+        size=env_size,
+        num_discs=num_discs,
+        num_beacons=num_beacons,
+        mode="collide",
+        auto=True,
+        animate=True,
+        p_filter=particle_filter,
+    )

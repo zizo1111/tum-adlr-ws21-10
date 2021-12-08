@@ -6,9 +6,7 @@ import threading
 
 
 class SimulationEnv:
-    def __init__(
-        self, size, num_discs, num_beacons, mode="def", auto=False, animate=False, p_filter=None
-    ):
+    def __init__(self, size, num_discs, num_beacons, mode="def", auto=False, animate=False, p_filter=None):
         """
         Initializes the simulation environment
         Parameters
@@ -84,7 +82,7 @@ class SimulationEnv:
         Calculates the next state of the disc.
         Parameters
         ----------
-        state : np.array
+        states : np.array
             The state (position and velocity) of the disc
         Returns
         -------
@@ -153,12 +151,14 @@ class SimulationEnv:
         Parameters
         ----------
         beacon_num : int
-            beacon index
+            beacon index; if -1: return distance to each beacon
         Returns
         -------
         reading : np.array
-            The he absolute distance between the discs and the
+            TODO: current workaround - subject to change:
+            The absolute distance between the discs and the
             given beacon
+            If beacon_num is -1: The absolute distance between the 0th disc and all beacons
         """
         noise = np.random.normal(loc=0.0, scale=0.1, size=self.num_beacons_)
 
@@ -181,7 +181,7 @@ class SimulationEnv:
 
     def get_setup(self):
         """
-        returns the simulation eviroment settings
+        returns the simulation environment settings
         """
         return np.asarray(
             [
@@ -196,7 +196,7 @@ class SimulationEnv:
 
     def auto_run(self, dt):
         """
-        auto runs the simulation enviroment, and updates the step regualry
+        auto runs the simulation environment, and updates the step regularly
         """
         self.auto_thread_ = threading.Timer(dt / 10, self.auto_run, args=[dt])
         self.auto_thread_.start()

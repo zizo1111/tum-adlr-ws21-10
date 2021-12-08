@@ -11,7 +11,7 @@ class ParticleFilter:
         self.observation_model = observation_model
 
         self.particles = np.empty((num_particles, state_dimension))
-        # distribute particles randomly with uniform weights
+        # distribute particles randomly with uniform weights:
         self.weights = np.full(num_particles, 1.0 / num_particles)
         self.particles[:, :2] = np.random.uniform(0, env_size, size=(num_particles, 2))
         self.particles[:, 2:] = np.random.normal(loc=0.0, scale=1.0, size=(num_particles, 2)) * 3
@@ -19,6 +19,13 @@ class ParticleFilter:
         self._estimate()
 
     def run(self, beacons, distances, dt):
+        """
+        Runs the Particle Filter once
+
+        :param beacons: Beacons positions
+        :param distances: Distances between the disc and beacons
+        :param dt: Time step
+        """
         self._predict(dt)
         self._update(beacons, distances)
         self._resample_residual()
@@ -28,6 +35,7 @@ class ParticleFilter:
         """
         Prediction step of Particle filter
 
+        :param dt: Time step of prediction
         :return: New set of particles after applying motion model
         """
         self.particles = self.motion_model.forward(particle_states=self.particles, dt=dt)
@@ -35,27 +43,36 @@ class ParticleFilter:
     def _update(self, beacons, disc_distances):
         """
         Update step of Particle filter
-        :param beacons:
-        :param disc_distances:
-        :return:
+
+        :param beacons: Beacons positions
+        :param disc_distances: Distances between the disc and beacons
+        :return: New set of weights -> "how good each particle describes current observation of the disc"
         """
         distance = self.observation_model.measure(self.particles[:, 0:2], beacons)
 
         # either use the overall error (L2-norm) of all distances to beacons to identify,
         # how well each particle matches the measurement...
         # <-> means "we don't distinguish between beacons"
-        error = np.linalg.norm(distance - disc_distances, axis=1)
-        #self.weights = self.weights * stats.norm(0.0, 10.0).pdf(error)  # TODO: + or *?
+        ## error = np.linalg.norm(distance - disc_distances, axis=1)
+        ## self.weights = self.weights * stats.norm(0.0, 10.0).pdf(error)
 
         # ...or use the distance to each beacon to provide individual likelihood, all of which will be 'merged' then
         # <-> means "each beacon is distinguishable"
         for i, b in enumerate(beacons):
             self.weights = self.weights * stats.norm(0.0, 10.0).pdf(np.abs(distance[:, i] - disc_distances[i]))
 
-        self.weights += 1.e-8  # avoid round-off to zero  # TODO: 1e-300 or -12 or -8?
+        self.weights += 1.0e-12  # avoid round-off to zero
         self.weights /= sum(self.weights)  # normalize
 
     def _resample_low_variance(self):
+        """
+        Resampling step of Particle filter
+
+        This uses Low Variance resampling
+        (see Probabilistic Robotics book: https://docs.ufpr.br/~danielsantos/ProbabilisticRobotics.pdf, p. 86)
+
+        :return: New set of particles and their weights
+        """
         new_particles = []
 
         r = np.random.uniform(low=0.0, high=1.0 / self.num_particles)
@@ -72,6 +89,14 @@ class ParticleFilter:
         self.weights.fill(1.0 / self.num_particles)
 
     def _resample_residual(self):
+        """
+        Resampling step of Particle filter
+
+        This uses Residual resampling with either Multinomial or Stratified resampling of remainders
+        (see the following paper http://users.isy.liu.se/rt/schon/Publications/HolSG2006.pdf for an overview)
+
+        :return: New set of particles and their weights
+        """
         indices = np.zeros(self.num_particles).astype(int)
 
         # allocate ⌊N*w⌋ copies of each particle
@@ -92,7 +117,7 @@ class ParticleFilter:
         indices = self.__multinomial(indices, residual, k)
 
         # ...or use stratified resampling
-        #indices = self.__stratified(indices, residual, k)
+        ## indices = self.__stratified(indices, residual, k)
 
         self.particles[:] = self.particles[indices]
         self.weights.fill(1.0 / len(self.weights))
@@ -132,7 +157,7 @@ class ParticleFilter:
         """
         pos = self.particles[:, 0:self.state_dimension]
         mean = np.average(pos, weights=self.weights, axis=0)
-        var = np.average((pos - mean)**2, weights=self.weights, axis=0)
+        var = np.average((pos - mean) ** 2, weights=self.weights, axis=0)
         self.estimate = mean, var
 
     def get_particles(self):
