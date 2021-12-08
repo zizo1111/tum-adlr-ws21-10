@@ -13,10 +13,8 @@ class ParticleFilter:
         self.particles = np.empty((num_particles, state_dimension))
         # distribute particles randomly with uniform weights
         self.weights = np.full(num_particles, 1.0 / num_particles)
-        self.particles[:, 0] = np.random.uniform(0, env_size, size=num_particles)
-        self.particles[:, 1] = np.random.uniform(0, env_size, size=num_particles)
-        self.particles[:, 2] = np.random.normal(loc=0.0, scale=1.0, size=num_particles) * 3
-        self.particles[:, 3] = np.random.uniform(0, 2 * np.pi, size=num_particles)
+        self.particles[:, :2] = np.random.uniform(0, env_size, size=(num_particles, 2))
+        self.particles[:, 2:] = np.random.normal(loc=0.0, scale=1.0, size=(num_particles, 2)) * 3
 
         self._estimate()
 
@@ -32,7 +30,7 @@ class ParticleFilter:
 
         :return: New set of particles after applying motion model
         """
-        self.particles = self.motion_model.forward(self.particles, dt)
+        self.particles = self.motion_model.forward(particle_states=self.particles, dt=dt)
 
     def _update(self, beacons, disc_distances):
         """
