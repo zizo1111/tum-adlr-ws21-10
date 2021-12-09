@@ -1,14 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from animation import Animator
+from simulation.animation import Animator
 import math
 import threading
 
 
 class SimulationEnv:
-    def __init__(
-        self, size, num_discs, num_beacons, mode="def", auto=False, animate=False
-    ):
+    def __init__(self, size, num_discs, num_beacons, mode="def", auto=False, animate=False, p_filter=None):
         """
         Initializes the simulation environment
         Parameters
@@ -27,6 +25,10 @@ class SimulationEnv:
         # parameters of the process model
         self.spring_force_ = 0.5
         self.drag_force_ = 0.0075
+
+        if p_filter:
+            self.particle_filter = p_filter
+            self.particles = p_filter.get_particles()
 
         # auto process steps
         self.auto_ = auto
@@ -67,7 +69,8 @@ class SimulationEnv:
 
         # initialize animation
         if self.animate_:
-            self.animator_ = Animator(self.env_size_, self.beacons_)
+            self.animator_ = Animator(self.env_size_, self.beacons_, True, True)
+            self.animator_.set_data(self.discs_, self.particle_filter.get_particles(), self.particle_filter.get_estimate())
             self.anim_start_ = True
             plt.show()
 
@@ -79,7 +82,7 @@ class SimulationEnv:
         Calculates the next state of the disc.
         Parameters
         ----------
-        state : np.array
+        states : np.array
             The state (position and velocity) of the disc
         Returns
         -------
@@ -113,14 +116,16 @@ class SimulationEnv:
             new_state[out_right, 1] = new_state[:, 1] - self.env_size_
 
         if self.animate_ and not self.auto_:
-            self.animator_.set_data(new_state)
+            self.animator_.set_data(new_state, self.particle_filter.get_particles(), self.particle_filter.get_estimate())
         return new_state
 
     def update_step(self, dt):
         """
         Calculates the next state of the discs.
         """
-        self.discs_ = self._process_model(self.discs_, dt)
+        for disc_num in range(self.num_discs_):
+            self.discs_ = self._process_model(self.discs_, dt)
+        self.particle_filter.run(self.beacons_, self.get_distance(-1), dt)
 
     def get_reading(self, beacon_num):
         """
@@ -146,19 +151,26 @@ class SimulationEnv:
         Parameters
         ----------
         beacon_num : int
-            beacon index
+            beacon index; if -1: return distance to each beacon
         Returns
         -------
         reading : np.array
-            The he absolute distance between the discs and the
+            TODO: current workaround - subject to change:
+            The absolute distance between the discs and the
             given beacon
+            If beacon_num is -1: The absolute distance between the 0th disc and all beacons
         """
         noise = np.random.normal(loc=0.0, scale=0.1, size=self.num_beacons_)
 
         dists = []
-        for disc_num in range(self.num_discs_):
-            pos = self.discs_[disc_num][:2] - self.beacons_[beacon_num]
-            dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
+        if beacon_num != -1:
+            for disc_num in range(self.num_discs_):
+                pos = self.discs_[disc_num][:2] - self.beacons_[beacon_num]
+                dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
+        else:
+            for beacon in self.beacons_:
+                pos = self.discs_[0][:2] - beacon
+                dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
         return np.asarray(dists + noise)
 
     def get_beacons_pos(self):
@@ -169,7 +181,7 @@ class SimulationEnv:
 
     def get_setup(self):
         """
-        returns the simulation eviroment settings
+        returns the simulation environment settings
         """
         return np.asarray(
             [
@@ -184,14 +196,14 @@ class SimulationEnv:
 
     def auto_run(self, dt):
         """
-        auto runs the simulation enviroment, and updates the step regualry
+        auto runs the simulation environment, and updates the step regularly
         """
         self.auto_thread_ = threading.Timer(dt / 10, self.auto_run, args=[dt])
         self.auto_thread_.start()
         with self.lock_:
             self.update_step(dt)
             if self.anim_start_ and self.animate_:
-                self.animator_.set_data(self.get_discs())
+                self.animator_.set_data(self.get_discs(), self.particle_filter.get_particles(), self.particle_filter.get_estimate())
 
 
 if __name__ == "__main__":

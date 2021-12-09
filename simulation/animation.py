@@ -42,7 +42,7 @@ class Animator:
         )
 
         # discs_vis holds the locations of the discs
-        (self.discs_vis,) = self.ax.plot([], [], "bo", ms=6)
+        (self.discs_vis,) = self.ax.plot([], [], "ko", ms=6)
 
         # beacons drawn as red dots
         (self.beacons_vis,) = self.ax.plot([], [], "ro", ms=6)
@@ -84,7 +84,6 @@ class Animator:
         return self.discs_vis, self.particles_vis, self.estimate_vis, self.rect
 
     def set_data(self, discs, particles=None, estimates=None):
-
         self.discs_ = discs
         if self.plot_particles and particles is not None:
             self.particles_ = particles
