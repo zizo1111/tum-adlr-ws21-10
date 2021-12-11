@@ -2,8 +2,10 @@ from simulation.simulation_env import SimulationEnv
 from filters.particle_filter import ParticleFilter
 from models.motion_model import MotionModel
 from models.observation_model import ObservationModel
+from simulation.dataset import Dataset, Sequence
 
-if __name__ == "__main__":
+
+def run_filter():
     # General configuration #
     state_dim = 4
     env_size = 200
@@ -38,3 +40,19 @@ if __name__ == "__main__":
         animate=True,
         p_filter=particle_filter,
     )
+
+
+def create_dataset():
+    set = Dataset(create=True)
+    set.save_dataset()
+
+
+def load_dataset(path=None):
+    set = Dataset()
+    set.load_dataset(path)
+    seq = set.get_sequence(2)
+    seq.play()
+
+
+if __name__ == "__main__":
+    run_filter()

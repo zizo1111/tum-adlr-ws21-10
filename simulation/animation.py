@@ -1,34 +1,20 @@
 import numpy as np
+import cv2
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 
 
 class Animator:
-    def __init__(self, size, beacons, plot_particles=False, plot_estimates=False):
+    def __init__(self, size, beacons):
         self.env_size_ = size
-        # plt.ion()
         self.fig = plt.figure()
 
         self.beacons_ = beacons
         self.discs_ = None
 
-        self.plot_particles = plot_particles
-        self.plot_estimates = plot_estimates
+        self.particles_ = None
+        self.estimates_ = None
 
-        self.ani = animation.FuncAnimation(
-            self.fig,
-            self.animate,
-            frames=600,
-            interval=100,
-            blit=True,
-            init_func=self.init_anim,
-        )
-        plt.show(block=False)
-
-    def init_anim(self):
-        """initialize animation"""
-        # set up figure and animation
-
+        # set up the figure
         self.fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
         fig_size = self.env_size_ + 100
         self.ax = self.fig.add_subplot(
@@ -63,10 +49,12 @@ class Animator:
         self.estimate_vis.set_data([], [])
         self.rect.set_edgecolor("none")
 
-        return self.discs_vis, self.rect
+    def plot_fig(self):
+        """
+        Plots the plt figure
 
-    def animate(self, i):
-        """perform animation step"""
+        :return ploted figure
+        """
 
         # update discs_vis the animation
         self.rect.set_edgecolor("k")
@@ -75,18 +63,46 @@ class Animator:
             self.discs_vis.set_data(self.discs_[:, 0], self.discs_[:, 1])
 
         # update particles visualization
-        if self.plot_particles:
+        if self.particles_ is not None:
             self.particles_vis.set_data(self.particles_[:, 0], self.particles_[:, 1])
 
-        if self.plot_estimates:
+        if self.estimates_ is not None:
             self.estimate_vis.set_data(self.estimates_[0][0], self.estimates_[0][1])
-
-        return self.discs_vis, self.particles_vis, self.estimate_vis, self.rect
+        return self.fig
 
     def set_data(self, discs, particles=None, estimates=None):
+        """
+        Updates the data, plots the new figure and visualizes it in cv2 window
+
+        :param discs: updated disc states
+        :param particles: updated particles states
+        :param estimates: updated estimates states
+        """
         self.discs_ = discs
-        if self.plot_particles and particles is not None:
+        if particles is not None:
             self.particles_ = particles
 
-        if self.plot_estimates and estimates is not None:
+        if estimates is not None:
             self.estimates_ = estimates
+        self.plot_fig()
+        cv2.imshow("self.title", self.convert(self.fig))
+
+        if cv2.waitKey(10) == 27:
+            cv2.destroyAllWindows()
+            return False
+
+        return True
+
+    def convert(self, fig):
+        """
+        Converts plt figure to cv2 image
+
+        :param fig: plt figure
+        :return: cv2 image
+        """
+        fig.canvas.draw()
+        # convert canvas to image
+        graph_image = np.array(fig.canvas.get_renderer()._renderer)
+        # it still is rgb, convert to opencv's default bgr
+        graph_image = cv2.cvtColor(graph_image, cv2.COLOR_RGB2BGR)
+        return graph_image

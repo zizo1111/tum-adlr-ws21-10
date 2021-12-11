@@ -1,6 +1,7 @@
 import numpy as np
 import math
-from simulation_env import SimulationEnv
+from simulation.simulation_env import SimulationEnv
+from simulation.animation import Animator
 
 
 class Sequence:
@@ -11,6 +12,7 @@ class Sequence:
         self.num_beacons_ = settings[2]
         self.beacons_ = settings[3]
         self.mode_ = settings[4]
+        self.dt_ = settings[5]
         self.readings_ = []
         self.current_idx = 0
 
@@ -88,17 +90,23 @@ class Sequence:
         self.current_idx += 1
         return np.asarray(dists + noise)
 
+    def play(self):
+        animator = Animator(self.env_size_, self.beacons_)
+        for reading in self.readings_:
+            animator.set_data(reading)
+
 
 class Dataset:
     def __init__(
         self,
         create=False,
         num_sequences=10,
-        sequence_length=100,
+        sequence_length=1000,
         env_size=200,
         num_discs=1,
         num_beacons=2,
         mode="random",
+        dt=1,
     ):
         self.sequences_ = []
         self.current_idx = 0
@@ -109,6 +117,7 @@ class Dataset:
             self.num_discs_ = num_discs
             self.num_beacons_ = num_beacons
             self.mode_ = mode
+            self.dt_ = dt
             self.create_dataset()
 
     def get_sequence_settings(self, sequence_index):
@@ -124,7 +133,7 @@ class Dataset:
                 mode_ = self.mode_
 
             sim = SimulationEnv(
-                self.env_size_, self.num_discs_, self.num_beacons_, mode_
+                self.env_size_, self.num_discs_, self.num_beacons_, mode_, dt=self.dt_
             )
             seq = Sequence(sim.get_setup())
 
@@ -154,9 +163,13 @@ class Dataset:
             np.save(f, settings)
             np.save(f, np.asarray(self.sequences_, dtype=object), allow_pickle=True)
 
-    def load_dataset(self, path="dataset.npy"):
+    def load_dataset(self, path=None):
 
-        with open(path, "rb") as f:
+        path_ = "dataset.npy"
+        if path:
+            path_ = path
+
+        with open(path_, "rb") as f:
             settings = np.load(f, allow_pickle=True)
             self.env_size_ = settings[0]
             self.num_discs_ = settings[1]
@@ -173,8 +186,8 @@ class Dataset:
 
 
 if __name__ == "__main__":
-    # set = Dataset(create=True)
-    # set.save_dataset()
+    set = Dataset(create=True)
+    set.save_dataset()
 
-    set = Dataset()
-    set.load_dataset()
+    # set = Dataset()
+    # set.load_dataset()

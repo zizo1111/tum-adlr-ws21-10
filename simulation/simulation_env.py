@@ -1,12 +1,20 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from simulation.animation import Animator
 import math
-import threading
 
 
 class SimulationEnv:
-    def __init__(self, size, num_discs, num_beacons, mode="def", auto=False, animate=False, p_filter=None):
+    def __init__(
+        self,
+        size,
+        num_discs,
+        num_beacons,
+        mode="def",
+        auto=False,
+        animate=False,
+        p_filter=None,
+        dt=1,
+    ):
         """
         Initializes the simulation environment
         Parameters
@@ -26,9 +34,13 @@ class SimulationEnv:
         self.spring_force_ = 0.5
         self.drag_force_ = 0.0075
 
+        self.filter_ = None
+        self.particles_ = None
+        self.estimates_ = None
         if p_filter:
-            self.particle_filter = p_filter
-            self.particles = p_filter.get_particles()
+            self.filter_ = p_filter
+            self.particles_ = p_filter.get_particles()
+            self.estimates_ = p_filter.get_estimate()
 
         # auto process steps
         self.auto_ = auto
@@ -63,16 +75,20 @@ class SimulationEnv:
         self.animate_ = animate
         # start auto run thread
         self.anim_start_ = False
-        if self.auto_:
-            self.lock_ = threading.Lock()
-            self.auto_run(1)
 
+        self.dt_ = dt
         # initialize animation
         if self.animate_:
-            self.animator_ = Animator(self.env_size_, self.beacons_, True, True)
-            self.animator_.set_data(self.discs_, self.particle_filter.get_particles(), self.particle_filter.get_estimate())
+            self.animator_ = Animator(self.env_size_, self.beacons_)
+            _ = self.animator_.set_data(
+                self.discs_,
+                self.particles_,
+                self.estimates_,
+            )
             self.anim_start_ = True
-            plt.show()
+
+        if self.auto_:
+            self.auto_run()
 
     def get_discs(self):
         return np.array(self.discs_)
@@ -115,17 +131,26 @@ class SimulationEnv:
             new_state[out_left, 1] = self.env_size_ - new_state[:, 1]
             new_state[out_right, 1] = new_state[:, 1] - self.env_size_
 
-        if self.animate_ and not self.auto_:
-            self.animator_.set_data(new_state, self.particle_filter.get_particles(), self.particle_filter.get_estimate())
         return new_state
 
-    def update_step(self, dt):
+    def update_step(self, dt=1):
         """
         Calculates the next state of the discs.
         """
         for disc_num in range(self.num_discs_):
             self.discs_ = self._process_model(self.discs_, dt)
-        self.particle_filter.run(self.beacons_, self.get_distance(-1), dt)
+
+        if self.filter_:
+            self.filter_.run(self.beacons_, self.get_distance(-1), dt)
+            self.particles_ = self.filter_.get_particles()
+            self.estimates_ = self.filter_.get_estimate()
+
+        if self.animate_ and not self.auto_:
+            return self.animator_.set_data(
+                self.discs_,
+                self.particles_,
+                self.estimates_,
+            )
 
     def get_reading(self, beacon_num):
         """
@@ -190,21 +215,21 @@ class SimulationEnv:
                 self.num_beacons_,
                 self.beacons_,
                 self.mode_,
+                self.dt_,
             ],
             dtype=object,
         )
 
-    def auto_run(self, dt):
+    def auto_run(self):
         """
         auto runs the simulation environment, and updates the step regularly
         """
-        self.auto_thread_ = threading.Timer(dt / 10, self.auto_run, args=[dt])
-        self.auto_thread_.start()
-        with self.lock_:
-            self.update_step(dt)
-            if self.anim_start_ and self.animate_:
-                self.animator_.set_data(self.get_discs(), self.particle_filter.get_particles(), self.particle_filter.get_estimate())
-
-
-if __name__ == "__main__":
-    box = SimulationEnv(200, 1, 2, mode="def", auto=True, animate=True)
+        while True:
+            self.update_step(self.dt_)
+            if self.animate_:
+                if not self.animator_.set_data(
+                    self.get_discs(),
+                    self.particles_,
+                    self.estimates_,
+                ):
+                    break
