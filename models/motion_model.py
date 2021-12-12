@@ -1,13 +1,26 @@
 import numpy as np
+import torch
+import torch.nn as nn
 
 
-class MotionModel:
-    def __init__(self, state_dimension: int, env_size: int, mode: str):
+class MotionModel(nn.Module):
+    def __init__(self, state_dimension: int, env_size: int, mode: str, num_particles: int = 100):
+        super().__init__()
+
         self.state_dimension = state_dimension
         self.env_size = env_size
         self.mode = mode
 
-    def forward(self, particle_states: np.ndarray, controls: np.ndarray = None, noise: np.ndarray = None, dt: float = 1.0) -> np.ndarray:
+        self.num_particles = num_particles
+        self.model = nn.Sequential(
+            nn.Linear(num_particles * state_dimension, 2 * num_particles * state_dimension),
+            nn.BatchNorm1d(2 * num_particles * state_dimension),
+            nn.ReLU(),
+            nn.Linear(2 * num_particles * state_dimension, num_particles * state_dimension),
+            nn.BatchNorm1d(num_particles * state_dimension),
+        )
+
+    def standard_forward(self, particle_states: np.ndarray, controls: np.ndarray = None, noise: np.ndarray = None, dt: float = 1.0) -> np.ndarray:
         """
         Propagates particle/disc states according to the motion model chosen for one time step dt
 
@@ -46,4 +59,10 @@ class MotionModel:
             predicted_particle_states[out_left, 1] = self.env_size - predicted_particle_states[:, 1]
             predicted_particle_states[out_right, 1] = predicted_particle_states[:, 1] - self.env_size
 
+        return predicted_particle_states
+
+    def forward(self, particle_states: torch.Tensor):
+        particle_states = particle_states.to(self.device)
+
+        predicted_particle_states = particle_states + self.model(particle_states).view(-1, self.num_particles, self.state_dimension)
         return predicted_particle_states

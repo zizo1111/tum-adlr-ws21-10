@@ -38,7 +38,7 @@ class ParticleFilter:
         :param dt: Time step of prediction
         :return: New set of particles after applying motion model
         """
-        self.particles = self.motion_model.forward(particle_states=self.particles, dt=dt)
+        self.particles = self.motion_model.standard_forward(particle_states=self.particles, dt=dt)
 
     def _update(self, beacons, disc_distances):
         """

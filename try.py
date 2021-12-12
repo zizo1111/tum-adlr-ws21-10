@@ -1,5 +1,6 @@
 from simulation.simulation_env import SimulationEnv
 from filters.particle_filter import ParticleFilter
+from filters.diff_particle_filter import DiffParticleFilter
 from models.motion_model import MotionModel
 from models.observation_model import ObservationModel
 from simulation.dataset import Dataset, Sequence
@@ -12,7 +13,7 @@ def run_filter():
     mode = "collide"
 
     # PF config #
-    num_particles = 5000
+    num_particles = 1000
 
     # Environment config #
     num_discs = 1
@@ -44,6 +45,38 @@ def run_filter():
     print(test_env.get_error())
 
 
+def run_diff_filter():
+    # General configuration #
+    state_dim = 4
+    env_size = 200
+    mode = "collide"
+
+    # PF config #
+    num_particles = 100
+
+    dynamics_model = MotionModel(
+        state_dimension=state_dim, env_size=env_size, mode=mode, num_particles=num_particles
+    )
+    observation_model = ObservationModel(
+        state_dimension=2, env_size=env_size
+    )
+
+    # Hyperparameters for differential filter #
+    hparams = {
+        "num_particles": num_particles,
+        "state_dimension": state_dim,
+        "env_size": env_size,
+        "soft_resample_alpha": 0.7,
+        "batch_size": 16,
+    }
+
+    diff_particle_filter = DiffParticleFilter(
+        hparams=hparams,
+        motion_model=dynamics_model,
+        observation_model=observation_model,
+    )
+
+
 def create_dataset():
     set = Dataset(create=True)
     set.save_dataset()
@@ -58,3 +91,4 @@ def load_dataset(path=None):
 
 if __name__ == "__main__":
     run_filter()
+    run_diff_filter()
