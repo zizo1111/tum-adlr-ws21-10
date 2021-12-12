@@ -1,5 +1,6 @@
 from simulation.simulation_env import SimulationEnv
 from filters.particle_filter import ParticleFilter
+from filters.diff_particle_filter import DiffParticleFilter
 from models.motion_model import MotionModel
 from models.observation_model import ObservationModel
 from simulation.dataset import Dataset, Sequence
@@ -12,7 +13,7 @@ def run_filter():
     mode = "collide"
 
     # PF config #
-    num_particles = 5000
+    num_particles = 1000
 
     # Environment config #
     num_discs = 1
@@ -42,6 +43,7 @@ def run_filter():
     )
 
     print(test_env.get_error())
+    print(test_env.get_timestep())
 
 
 def create_dataset():
