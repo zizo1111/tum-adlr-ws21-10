@@ -41,6 +41,8 @@ def run_filter():
         p_filter=particle_filter,
     )
 
+    print(test_env.get_error())
+
 
 def create_dataset():
     set = Dataset(create=True)

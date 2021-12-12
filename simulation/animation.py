@@ -12,7 +12,7 @@ class Animator:
         self.discs_ = None
 
         self.particles_ = None
-        self.estimates_ = None
+        self.estimate_ = None
 
         # set up the figure
         self.fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
@@ -66,24 +66,24 @@ class Animator:
         if self.particles_ is not None:
             self.particles_vis.set_data(self.particles_[:, 0], self.particles_[:, 1])
 
-        if self.estimates_ is not None:
-            self.estimate_vis.set_data(self.estimates_[0][0], self.estimates_[0][1])
+        if self.estimate_ is not None:
+            self.estimate_vis.set_data(self.estimate_[0][0], self.estimate_[0][1])  # only `mean` (i.e. [0]) is shown
         return self.fig
 
-    def set_data(self, discs, particles=None, estimates=None):
+    def set_data(self, discs, particles=None, estimate=None):
         """
         Updates the data, plots the new figure and visualizes it in cv2 window
 
         :param discs: updated disc states
         :param particles: updated particles states
-        :param estimates: updated estimates states
+        :param estimate: updated estimate state
         """
         self.discs_ = discs
         if particles is not None:
             self.particles_ = particles
 
-        if estimates is not None:
-            self.estimates_ = estimates
+        if estimate is not None:
+            self.estimate_ = estimate
         self.plot_fig()
         cv2.imshow("self.title", self.convert(self.fig))
 

@@ -36,11 +36,15 @@ class SimulationEnv:
 
         self.filter_ = None
         self.particles_ = None
-        self.estimates_ = None
+        self.estimate_ = None
         if p_filter:
             self.filter_ = p_filter
             self.particles_ = p_filter.get_particles()
-            self.estimates_ = p_filter.get_estimate()
+            self.estimate_ = p_filter.get_estimate()
+
+            # Error propagation
+            self.timesteps = 0
+            self.mse = 0
 
         # auto process steps
         self.auto_ = auto
@@ -83,7 +87,7 @@ class SimulationEnv:
             _ = self.animator_.set_data(
                 self.discs_,
                 self.particles_,
-                self.estimates_,
+                self.estimate_,
             )
             self.anim_start_ = True
 
@@ -143,14 +147,25 @@ class SimulationEnv:
         if self.filter_:
             self.filter_.run(self.beacons_, self.get_distance(-1), dt)
             self.particles_ = self.filter_.get_particles()
-            self.estimates_ = self.filter_.get_estimate()
+            self.estimate_ = self.filter_.get_estimate()
+            self._compute_error()
 
         if self.animate_ and not self.auto_:
             return self.animator_.set_data(
                 self.discs_,
                 self.particles_,
-                self.estimates_,
+                self.estimate_,
             )
+
+    def _compute_error(self):
+        """
+        Computes the error (MSE) at each timestep
+        Note: The error is not averaged over all timesteps!
+
+        :return: MSE at each timestep
+        """
+        self.mse += np.linalg.norm(self.discs_[0] - self.estimate_)  # 0th disc is always predicted
+        self.timesteps += 1
 
     def get_reading(self, beacon_num):
         """
@@ -204,6 +219,14 @@ class SimulationEnv:
         """
         return self.beacons_
 
+    def get_error(self):
+        """
+        Returns overall error (MSE)
+
+        :return: current MSE, averaged over all timesteps
+        """
+        return self.mse / self.timesteps
+
     def get_setup(self):
         """
         returns the simulation environment settings
@@ -230,6 +253,6 @@ class SimulationEnv:
                 if not self.animator_.set_data(
                     self.get_discs(),
                     self.particles_,
-                    self.estimates_,
+                    self.estimate_,
                 ):
                     break
