@@ -2,6 +2,8 @@ import torch
 import torch.distributions as D
 import torch.nn as nn
 
+from models.observation_model import ObservationModel
+
 
 class DiffParticleFilter(nn.Module):
     def __init__(self, hparams, motion_model, observation_model):
@@ -22,7 +24,11 @@ class DiffParticleFilter(nn.Module):
         state_dim = self.hparams["state_dimension"]
 
         # Sample particles as GMM
-        mix = D.Categorical(torch.ones(M,))
+        mix = D.Categorical(
+            torch.ones(
+                M,
+            )
+        )
         comp = D.Independent(
             D.Normal(torch.randn(M, state_dim), torch.rand(M, state_dim)), 1
         )
@@ -42,3 +48,8 @@ class DiffParticleFilter(nn.Module):
 
         self.particle_states = self.motion_model.forward(self.particle_states)
         assert self.particle_states.shape == (N, M, state_dim)
+
+        input_obs = self.observation_model.prepare_input(
+            self.particle_states[:, 0:2], self.hparams["beacon_positions"]
+        )
+        self.observation_lik = self.observation_model.forward(input_obs)

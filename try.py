@@ -54,11 +54,21 @@ def run_diff_filter():
     # PF config #
     num_particles = 100
 
+    # beacons config -> TODO #
+    num_beacons = 2
+    beacon_positions = [[0, env_size], [env_size, env_size]]
+
     dynamics_model = MotionModel(
-        state_dimension=state_dim, env_size=env_size, mode=mode, num_particles=num_particles
+        state_dimension=state_dim,
+        env_size=env_size,
+        mode=mode,
+        num_particles=num_particles,
     )
     observation_model = ObservationModel(
-        state_dimension=2, env_size=env_size
+        state_dimension=2,
+        env_size=env_size,
+        num_particles=num_particles,
+        num_beacons=num_beacons,
     )
 
     # Hyperparameters for differential filter #
@@ -68,6 +78,7 @@ def run_diff_filter():
         "env_size": env_size,
         "soft_resample_alpha": 0.7,
         "batch_size": 16,
+        "beacon_positions": beacon_positions,
     }
 
     diff_particle_filter = DiffParticleFilter(
