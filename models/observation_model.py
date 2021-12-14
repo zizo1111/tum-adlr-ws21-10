@@ -3,6 +3,15 @@ import torch.nn as nn
 import torch
 
 
+class Lambda(nn.Module):
+    def __init__(self, func):
+        super().__init__()
+        self.func = func
+
+    def forward(self, x):
+        return self.func(x)
+
+
 class ObservationModel(nn.Module):
     def __init__(
         self,
@@ -16,27 +25,23 @@ class ObservationModel(nn.Module):
         self.env_size = env_size
         self.num_particles_ = num_particles
         self.num_beacons = num_beacons
+        # inspired by the paper
+        self.min_obs_likelihood = 0.004
 
         self.model = nn.Sequential(
-            nn.Linear(
-                num_particles * state_dimension + num_beacons * 2,
-                num_particles * state_dimension,
-            ),
+            nn.Linear(state_dimension + (num_beacons * 2), 32),
             nn.ReLU(),
-            nn.Linear(
-                num_particles * state_dimension,
-                num_particles * state_dimension,
-            ),
+            nn.Linear(32, 32),
             nn.ReLU(),
-            nn.Linear(
-                num_particles * state_dimension,
-                num_particles * state_dimension,
-            ),
+            nn.Linear(32, 16),
             nn.ReLU(),
-            nn.Linear(num_particles * state_dimension, num_particles * 2),
+            nn.Linear(16, 16),
             nn.ReLU(),
-            nn.Linear(num_particles * 2, num_particles),
+            nn.Linear(16, 1),
             nn.Sigmoid(),
+            Lambda(
+                lambda x: x * (1 - self.min_obs_likelihood) + self.min_obs_likelihood
+            ),
         )
 
     def forward(self, x: torch.Tensor):
