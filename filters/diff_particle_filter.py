@@ -12,6 +12,7 @@ class DiffParticleFilter(nn.Module):
         self.hparams = hparams
         self.motion_model = motion_model
         self.observation_model = observation_model
+        self.observation_model.apply(self.initialize_weight)
 
         self.particle_states = torch.Tensor
         self.weights = torch.Tensor
@@ -41,6 +42,10 @@ class DiffParticleFilter(nn.Module):
         self.weights = self.particle_states.new_full((N, M), 1.0 / M)
         assert self.weights.shape == (N, M)
 
+    def initialize_weight(self, module):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
+
     def forward(self):
         N = self.hparams["batch_size"]
         M = self.hparams["num_particles"]
@@ -52,4 +57,4 @@ class DiffParticleFilter(nn.Module):
         input_obs = self.observation_model.prepare_input(
             self.particle_states[:, 0:2], self.hparams["beacon_positions"]
         )
-        self.observation_lik = self.observation_model.forward(input_obs)
+        self.observation_lik = self.observation_model(input_obs)
