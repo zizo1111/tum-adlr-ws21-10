@@ -4,12 +4,16 @@ import torch
 
 
 class Lambda(nn.Module):
-    def __init__(self, func):
+    def __init__(self, func, dfunc):
         super().__init__()
         self.func = func
+        self.dfunc = dfunc
 
     def forward(self, x):
         return self.func(x)
+
+    def backward(self, x):
+        return self.dfunc(x)
 
 
 class ObservationModel(nn.Module):
@@ -19,6 +23,7 @@ class ObservationModel(nn.Module):
         env_size: int,
         num_particles: int = 100,
         num_beacons: int = 2,
+        device: str = "cpu",
     ):
         super().__init__()
         self.state_dimension = state_dimension
@@ -28,6 +33,7 @@ class ObservationModel(nn.Module):
         # inspired by the paper
         self.min_obs_likelihood = 0.004
 
+        self.device = device
         self.model = nn.Sequential(
             nn.Linear(state_dimension + (num_beacons * 2), 32),
             nn.ReLU(),
@@ -40,7 +46,8 @@ class ObservationModel(nn.Module):
             nn.Linear(16, 1),
             nn.Sigmoid(),
             Lambda(
-                lambda x: x * (1 - self.min_obs_likelihood) + self.min_obs_likelihood
+                lambda x: x * (1 - self.min_obs_likelihood) + self.min_obs_likelihood,
+                lambda: 1 - self.min_obs_likelihood,
             ),
         )
 
@@ -50,12 +57,14 @@ class ObservationModel(nn.Module):
 
     def prepare_input(self, particle_states, beacon_positions) -> torch.Tensor:
 
-        concat = np.concatenate(
-            (particle_states.reshape(-1), beacon_positions.reshape(-1)),
-            axis=0,
+        beacon_repeated = np.tile(
+            beacon_positions.reshape(-1), (len(particle_states), 1)
         )
-
-        return torch.from_numpy(concat)
+        concat = np.concatenate(
+            (particle_states, beacon_repeated),
+            axis=1,
+        )
+        return torch.from_numpy(concat).float()
 
     def measure(
         self,
