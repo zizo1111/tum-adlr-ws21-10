@@ -35,7 +35,7 @@ class ObservationModel(nn.Module):
 
         self.device = device
         self.model = nn.Sequential(
-            nn.Linear(state_dimension + (num_beacons * 2), 32),
+            nn.Linear(state_dimension + (num_beacons * 3), 32),
             nn.ReLU(),
             nn.Linear(32, 32),
             nn.ReLU(),
@@ -55,13 +55,18 @@ class ObservationModel(nn.Module):
         x = x.to(self.device)
         return self.model(x)
 
-    def prepare_input(self, particle_states, beacon_positions) -> torch.Tensor:
+    def prepare_input(
+        self, particle_states, beacon_positions, measurement
+    ) -> torch.Tensor:
 
         beacon_repeated = np.tile(
             beacon_positions.reshape(-1), (len(particle_states), 1)
         )
+        measurement_repeated = np.tile(
+            measurement.reshape(-1), (len(particle_states), 1)
+        )
         concat = np.concatenate(
-            (particle_states, beacon_repeated),
+            (particle_states, beacon_repeated, measurement_repeated),
             axis=1,
         )
         return torch.from_numpy(concat).float()
