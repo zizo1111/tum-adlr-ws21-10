@@ -62,6 +62,8 @@ class SimulationEnv:
         # wrap the environment
         self.mode_ = mode
 
+        self.error_each_step = np.zeros((100,), dtype=float)
+
         discs_ = []
         # init discs
         for disc_num in range(self.num_discs_):
@@ -94,12 +96,11 @@ class SimulationEnv:
         # initialize animation
         if self.animate_:
             self.animator_ = Animator(self.env_size_, self.beacons_)
-            _ = self.animator_.set_data(
-                self.discs_,
-                self.particles_,
-                self.estimate_,
-            )
+            _ = self.animator_.set_data(self.discs_, self.particles_, self.estimate_,)
             self.anim_start_ = True
+
+        self._compute_error()
+        self.exit = False
 
         if self.auto_:
             self.auto_run()
@@ -204,10 +205,7 @@ class SimulationEnv:
                 torch.from_numpy(np.array([self.get_distance(-1)]).astype(np.float32)),
                 setting,
             )
-            estimate, weights, particles = self.dpf_(
-                norm_measurement,
-                norm_beacon_pos,
-            )
+            estimate, weights, particles = self.dpf_(norm_measurement, norm_beacon_pos,)
             unnorm_est, unorm_particles = unnormalize_estimate(
                 estimate.clone().detach(), particles.clone().detach(), self.env_size_
             )
@@ -216,9 +214,7 @@ class SimulationEnv:
             self.weights_ = weights.cpu().detach().numpy()
         if self.animate_ and not self.auto_:
             return self.animator_.set_data(
-                self.discs_,
-                self.particles_,
-                self.estimate_,
+                self.discs_, self.particles_, self.estimate_,
             )
 
     def _compute_error(self):
@@ -228,10 +224,16 @@ class SimulationEnv:
 
         :return: sum of squared errors
         """
+        # TODO: indices changed to reduce error to positioning only
         self.rmse += np.linalg.norm(
-            self.discs_[0] - self.estimate_[0]
+            self.discs_[0][:2] - self.estimate_[0][:2]
         )  # 0th disc is always predicted
+
+        self.error_each_step[self.timesteps] = np.sqrt(self.rmse / (self.timesteps + 1))
+
         self.timesteps += 1
+        if self.timesteps == 100:
+            self.exit = True
 
     def get_reading(self, beacon_num):
         """
@@ -296,6 +298,9 @@ class SimulationEnv:
     def get_timestep(self):
         return self.timesteps
 
+    def get_error_each_timestep(self):
+        return self.error_each_step
+
     def get_setup(self):
         """
         returns the simulation environment settings
@@ -316,13 +321,11 @@ class SimulationEnv:
         """
         auto runs the simulation environment, and updates the step regularly
         """
-        while True:
+        while not self.exit:
             self.update_step(self.dt_)
             if self.animate_:
                 if not self.animator_.set_data(
-                    self.get_discs(),
-                    self.particles_,
-                    self.estimate_,
+                    self.get_discs(), self.particles_, self.estimate_,
                 ):
                     break
 
@@ -343,6 +346,7 @@ class SimulationEnv:
             measurment.append(self.get_distance(-1))
             state.append(self.discs_)
             self.update_step()
-        return np.array(measurment).astype(np.float32), np.array(state).astype(
-            np.float32
+        return (
+            np.array(measurment).astype(np.float32),
+            np.array(state).astype(np.float32),
         )
