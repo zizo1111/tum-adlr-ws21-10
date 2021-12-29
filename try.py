@@ -62,7 +62,6 @@ def run_diff_filter():
         state_dimension=state_dim,
         env_size=env_size,
         mode=mode,
-        num_particles=num_particles,
     )
     observation_model = ObservationModel(
         state_dimension=2,
@@ -77,7 +76,7 @@ def run_diff_filter():
         "state_dimension": state_dim,
         "env_size": env_size,
         "soft_resample_alpha": 0.7,
-        "batch_size": 16,
+        "batch_size": 8,
         "beacon_positions": beacon_positions,
     }
 
@@ -86,6 +85,9 @@ def run_diff_filter():
         motion_model=dynamics_model,
         observation_model=observation_model,
     )
+
+    measurement = [[0.1, 50]]  # TODO: where are we supposed to get measurement from?
+    diff_particle_filter.forward(measurement)
 
 
 def create_dataset():

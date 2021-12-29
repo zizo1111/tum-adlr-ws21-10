@@ -1,26 +1,41 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.distributions as D
+import torch.nn.functional as F
 
 
 class MotionModel(nn.Module):
-    def __init__(self, state_dimension: int, env_size: int, mode: str, num_particles: int = 100):
+    def __init__(self, state_dimension: int, env_size: int, mode: str):
         super().__init__()
 
         self.state_dimension = state_dimension
         self.env_size = env_size
         self.mode = mode
 
-        self.num_particles = num_particles
+        # Apply motion model per batch element + per each particle
+        # -> shared weights for each particle
         self.model = nn.Sequential(
-            nn.Linear(num_particles * state_dimension, 2 * num_particles * state_dimension),
-            nn.BatchNorm1d(2 * num_particles * state_dimension),
+            nn.Linear(state_dimension, 2 * state_dimension),
+            nn.BatchNorm1d(100),  # TODO: BatchNorm is applied on the second input dimension for (N,C,L);
+                                  # we need it on the L here (?) -> some permutation of the input has to be done
             nn.ReLU(),
-            nn.Linear(2 * num_particles * state_dimension, num_particles * state_dimension),
-            nn.BatchNorm1d(num_particles * state_dimension),
+            nn.Linear(2 * state_dimension, state_dimension * state_dimension),
+            nn.BatchNorm1d(100),  # TODO: same here
+            nn.ReLU(),
+            # mean + lower triangular L for covariance matrix
+            # S = L * L.T, with L having positive-valued diagonal entries
+            nn.Linear(state_dimension * state_dimension, state_dimension * (state_dimension + 3) // 2),
+            nn.BatchNorm1d(100),  # TODO: same for BatchNorm here
         )
 
-    def standard_forward(self, particle_states: np.ndarray, controls: np.ndarray = None, noise: np.ndarray = None, dt: float = 1.0) -> np.ndarray:
+    def standard_forward(
+        self,
+        particle_states: np.ndarray,
+        controls: np.ndarray = None,
+        noise: np.ndarray = None,
+        dt: float = 1.0,
+    ) -> np.ndarray:
         """
         Propagates particle/disc states according to the motion model chosen for one time step dt
 
@@ -62,7 +77,34 @@ class MotionModel(nn.Module):
         return predicted_particle_states
 
     def forward(self, particle_states: torch.Tensor):
-        particle_states = particle_states.to(self.device)
+        N = particle_states.shape[0]  # batch size
+        M = particle_states.shape[1]  # number of particles
+        # particle_states = particle_states.to(self.device)  # TODO: uncomment for training
 
-        predicted_particle_states = particle_states + self.model(particle_states).view(-1, self.num_particles, self.state_dimension)
+        x = self.model(particle_states)
+
+        # Split to get the mean and covariance matrix separately
+        predicted_mean, predicted_lower_diag = torch.split(
+            x,
+            [self.state_dimension, self.state_dimension * (self.state_dimension + 1) // 2],
+            dim=2,
+        )
+        assert predicted_mean.shape == (N, M, self.state_dimension)
+        assert predicted_lower_diag.shape == (N, M, self.state_dimension * (self.state_dimension + 1) // 2)
+
+        # Reform to get the tensor of covariance matrices
+        predicted_tril = torch.zeros(N, M, self.state_dimension, self.state_dimension)
+        tril_indices = torch.tril_indices(row=self.state_dimension, col=self.state_dimension, offset=0)
+        predicted_tril[:, :, tril_indices[0], tril_indices[1]] = predicted_lower_diag
+
+        # Apply threshold to get only positive values on the diagonal -> to satisfy the constraint LowerCholesky()
+        F.threshold(torch.diagonal(predicted_tril, offset=0, dim1=2, dim2=3), threshold=0, value=1.e-5, inplace=True)
+        assert predicted_tril.shape == (N, M, self.state_dimension, self.state_dimension)
+
+        # Sample (with gradient) from the resulting distribution -> "reparameterization trick"
+        predicted_particle_states = D.MultivariateNormal(
+            loc=predicted_mean,
+            scale_tril=predicted_tril,
+        ).rsample()
+
         return predicted_particle_states
