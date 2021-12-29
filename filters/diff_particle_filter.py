@@ -51,10 +51,19 @@ class DiffParticleFilter(nn.Module):
         M = self.hparams["num_particles"]
         state_dim = self.hparams["state_dimension"]
 
+        # Apply motion model to predict next particle states
         self.particle_states = self.motion_model.forward(self.particle_states)
         assert self.particle_states.shape == (N, M, state_dim)
 
+        # Apply observation model to get the likelihood for each particle
         input_obs = self.observation_model.prepare_input(
             self.particle_states[:, 0:2], self.hparams["beacon_positions"], measurement
         )
-        self.observation_lik = self.observation_model(input_obs)
+        observation_lik = self.observation_model(input_obs)
+        assert observation_lik.shape == (N, M)
+
+        # Update particle weights
+        self.weights *= observation_lik
+        self.weights /= torch.sum(self.weights, dim=1, keepdim=True)  # TODO: change to `logsumexp` if log weights used
+        assert self.weights.shape == (N, M)
+        assert torch.allclose(torch.sum(self.weights, dim=1, keepdim=True), torch.ones(N))
