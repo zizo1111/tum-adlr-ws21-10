@@ -164,7 +164,9 @@ class SimulationEnv:
 
         :return: MSE at each timestep
         """
-        self.mse += np.linalg.norm(self.discs_[0] - self.estimate_)  # 0th disc is always predicted
+        self.mse += np.linalg.norm(
+            self.discs_[0] - self.estimate_
+        )  # 0th disc is always predicted
         self.timesteps += 1
 
     def get_reading(self, beacon_num):
@@ -256,3 +258,20 @@ class SimulationEnv:
                     self.estimate_,
                 ):
                     break
+
+    def run_batch(self, N):
+        """
+        runs the simulation for batch_size N
+        Parameters
+        ----------
+        N : int
+            batch size
+        Returns
+        -------
+        measurement : np.array
+        """
+        measurment = []
+        for i in range(N):
+            measurment.append(self.get_distance(-1))
+            self.update_step()
+        return np.array(measurment)

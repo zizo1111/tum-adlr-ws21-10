@@ -96,7 +96,7 @@ class Sequence:
             animator.set_data(reading)
 
 
-class Dataset:
+class DatasetSeq:
     def __init__(
         self,
         create=False,
@@ -186,8 +186,8 @@ class Dataset:
 
 
 if __name__ == "__main__":
-    set = Dataset(create=True)
+    set = DatasetSeq(create=True)
     set.save_dataset()
 
-    # set = Dataset()
+    # set = DatasetSeq()
     # set.load_dataset()

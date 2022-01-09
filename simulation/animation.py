@@ -67,7 +67,9 @@ class Animator:
             self.particles_vis.set_data(self.particles_[:, 0], self.particles_[:, 1])
 
         if self.estimate_ is not None:
-            self.estimate_vis.set_data(self.estimate_[0][0], self.estimate_[0][1])  # only `mean` (i.e. [0]) is shown
+            self.estimate_vis.set_data(
+                self.estimate_[0][0], self.estimate_[0][1]
+            )  # only `mean` (i.e. [0]) is shown
         return self.fig
 
     def set_data(self, discs, particles=None, estimate=None):
@@ -85,7 +87,7 @@ class Animator:
         if estimate is not None:
             self.estimate_ = estimate
         self.plot_fig()
-        cv2.imshow("self.title", self.convert(self.fig))
+        cv2.imshow("Simulation", self.convert(self.fig))
 
         if cv2.waitKey(10) == 27:
             cv2.destroyAllWindows()

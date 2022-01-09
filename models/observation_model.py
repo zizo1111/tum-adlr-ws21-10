@@ -53,21 +53,19 @@ class ObservationModel(nn.Module):
 
     def forward(self, x: torch.Tensor):
         x = x.to(self.device)
-        return self.model(x)
+        # to pass asserts
+        return self.model(x)[:, :, -1]
 
     def prepare_input(
         self, particle_states, beacon_positions, measurement
     ) -> torch.Tensor:
-
-        beacon_repeated = np.tile(
-            beacon_positions.reshape(-1), (len(particle_states), 1)
-        )
-        measurement_repeated = np.tile(
-            measurement.reshape(-1), (len(particle_states), 1)
-        )
+        N = particle_states.shape[0]  # batch size
+        M = particle_states.shape[1]  # number of particles
+        beacon_repeated = np.tile(beacon_positions.reshape(-1), (N, M, 1))
+        measurement_repeated = np.tile(measurement[:, np.newaxis], (1, M, 1))
         concat = np.concatenate(
-            (particle_states, beacon_repeated, measurement_repeated),
-            axis=1,
+            (particle_states.detach().numpy(), beacon_repeated, measurement_repeated),
+            axis=2,
         )
         return torch.from_numpy(concat).float()
 

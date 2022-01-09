@@ -3,7 +3,7 @@ from filters.particle_filter import ParticleFilter
 from filters.diff_particle_filter import DiffParticleFilter
 from models.motion_model import MotionModel
 from models.observation_model import ObservationModel
-from simulation.dataset import Dataset, Sequence
+from simulation.dataset import DatasetSeq, Sequence
 
 
 def run_filter():
@@ -50,13 +50,20 @@ def run_diff_filter():
     state_dim = 4
     env_size = 200
     mode = "collide"
-
+    num_discs = 1
     # PF config #
     num_particles = 100
 
     # beacons config -> TODO #
     num_beacons = 2
-    beacon_positions = [[0, env_size], [env_size, env_size]]
+
+    test_env = SimulationEnv(
+        size=env_size,
+        num_discs=num_discs,
+        num_beacons=num_beacons,
+        mode=mode,
+        auto=False,
+    )
 
     dynamics_model = MotionModel(
         state_dimension=state_dim,
@@ -69,6 +76,8 @@ def run_diff_filter():
         num_particles=num_particles,
         num_beacons=num_beacons,
     )
+
+    beacon_positions = test_env.get_beacons_pos()
 
     # Hyperparameters for differential filter #
     hparams = {
@@ -85,23 +94,26 @@ def run_diff_filter():
         motion_model=dynamics_model,
         observation_model=observation_model,
     )
-
-    measurement = [[0.1, 50]]  # TODO: where are we supposed to get measurement from?
+    measurement = test_env.run_batch(hparams["batch_size"])
+    # TODO: where are we supposed to get measurement from?
+    # Num of measurements = Batch size
+    # in test does it make sense to have batch number > 1
     diff_particle_filter.forward(measurement)
 
 
 def create_dataset():
-    set = Dataset(create=True)
+    set = DatasetSeq(create=True)
     set.save_dataset()
 
 
 def load_dataset(path=None):
-    set = Dataset()
+    set = DatasetSeq()
     set.load_dataset(path)
     seq = set.get_sequence(2)
     seq.play()
 
 
 if __name__ == "__main__":
-    run_filter()
+    # run_filter()
     run_diff_filter()
+    # create_dataset()
