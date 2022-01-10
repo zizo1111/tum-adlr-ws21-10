@@ -1,5 +1,8 @@
 import numpy as np
 import math
+import torch
+import matplotlib.pyplot as plt
+from torch.utils.data import Dataset, DataLoader
 from simulation.simulation_env import SimulationEnv
 from simulation.animation import Animator
 
@@ -157,7 +160,7 @@ class DatasetSeq:
         )
         path_ = path
         if path is None:
-            path_ = "dataset.npy"
+            path_ = "datasets/dataset.npy"
 
         with open(path_, "wb") as f:
             np.save(f, settings)
@@ -165,7 +168,7 @@ class DatasetSeq:
 
     def load_dataset(self, path=None):
 
-        path_ = "dataset.npy"
+        path_ = "datasets/dataset.npy"
         if path:
             path_ = path
 
@@ -183,6 +186,19 @@ class DatasetSeq:
     def get_sequence(self, seq_idx=None):
         idx = self.current_idx if seq_idx is None else seq_idx
         return self.sequences_[idx]
+
+
+class PFDataset(Dataset):
+    """PF torch dataset."""
+
+    def __init__(self, path):
+        pass
+
+    def __len__(self):
+        pass
+
+    def __getitem__(self, idx):
+        pass
 
 
 if __name__ == "__main__":

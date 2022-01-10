@@ -3,7 +3,7 @@ from filters.particle_filter import ParticleFilter
 from filters.diff_particle_filter import DiffParticleFilter
 from models.motion_model import MotionModel
 from models.observation_model import ObservationModel
-from simulation.dataset import DatasetSeq, Sequence
+from utils.dataset import DatasetSeq
 
 
 def run_filter():
