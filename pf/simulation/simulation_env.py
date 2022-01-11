@@ -1,5 +1,5 @@
 import numpy as np
-from simulation.animation import Animator
+from pf.simulation.animation import Animator
 import math
 
 

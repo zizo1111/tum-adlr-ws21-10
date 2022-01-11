@@ -1,9 +1,9 @@
-from simulation.simulation_env import SimulationEnv
-from filters.particle_filter import ParticleFilter
-from filters.diff_particle_filter import DiffParticleFilter
-from models.motion_model import MotionModel
-from models.observation_model import ObservationModel
-from utils.dataset import DatasetSeq
+from pf.simulation.simulation_env import SimulationEnv
+from pf.filters.particle_filter import ParticleFilter
+from pf.filters.diff_particle_filter import DiffParticleFilter
+from pf.models.motion_model import MotionModel
+from pf.models.observation_model import ObservationModel
+from pf.utils.dataset import DatasetSeq
 
 
 def run_filter():
@@ -114,6 +114,6 @@ def load_dataset(path=None):
 
 
 if __name__ == "__main__":
-    # run_filter()
-    run_diff_filter()
+    run_filter()
+    # run_diff_filter()
     # create_dataset()

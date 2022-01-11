@@ -3,8 +3,8 @@ import math
 import torch
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
-from simulation.simulation_env import SimulationEnv
-from simulation.animation import Animator
+from pf.simulation.simulation_env import SimulationEnv
+from pf.simulation.animation import Animator
 
 
 class Sequence:
@@ -16,29 +16,30 @@ class Sequence:
         self.beacons_ = settings[3]
         self.mode_ = settings[4]
         self.dt_ = settings[5]
-        self.readings_ = []
-        self.current_idx = 0
+        self.states_ = []
 
-    def add_reading(self, reading):
-        self.readings_.append(reading)
+    def add_state(self, state):
+        self.states_.append(state)
 
-    def get_setup(self):
-        return np.asarray(
-            [
-                self.env_size_,
-                self.num_discs_,
-                self.num_beacons_,
-                self.beacons_,
-                self.mode_,
-            ],
-            dtype=object,
-        )
+    def get_settings(self):
+        settings = {
+            "env_size": self.env_size_,
+            "num_discs": self.num_discs_,
+            "num_beacons": self.num_beacons_,
+            "beacons_pos": self.beacons_,
+            "mode": self.mode_,
+            "dt": self.dt_,
+        }
+        return settings
 
     def get_length(self):
-        return len(self.readings_)
+        return len(self.states_)
 
-    def get_readings(self):
-        return self.readings_
+    def get_state(self, idx):
+        if idx != -1:
+            return self.states_[idx]
+        else:
+            return self.states_
 
     def get_beacons_pos(self):
         """
@@ -46,7 +47,7 @@ class Sequence:
         """
         return self.beacons_
 
-    def get_reading(self, beacon_num, frame_idx=None):
+    def get_reading(self, beacon_num, idx):
         """
         Calculates the current state of the discs wrt to beacon.
         Parameters
@@ -59,16 +60,13 @@ class Sequence:
             The current state (position) of the discs wrt to
             given beacon
         """
-        idx = self.current_idx if frame_idx is None else frame_idx
+        ## i dont think we need that ?
         reading = []
         for disc_num in range(self.num_discs_):
-            reading.append(
-                self.readings_[idx][disc_num][:2] - self.beacons_[beacon_num]
-            )
-        self.current_idx += 1
+            reading.append(self.states_[idx][disc_num][:2] - self.beacons_[beacon_num])
         return np.asarray(reading)
 
-    def get_distance(self, beacon_num, frame_idx=None):
+    def get_distance(self, beacon_num, idx):
         """
         Calculates the absolute distance between the discs and the beacon.
         Parameters
@@ -77,26 +75,29 @@ class Sequence:
             beacon index
         Returns
         -------
-        reading : np.array
+        distance : np.array
             The he absolute distance between the discs and the
             given beacon
         """
-        idx = self.current_idx if frame_idx is None else frame_idx
-
         # TODO should also noise be added here?
         noise = np.random.normal(loc=0.0, scale=0.1, size=self.num_beacons_)
 
         dists = []
-        for disc_num in range(self.num_discs_):
-            pos = self.readings_[idx][disc_num][:2] - self.beacons_[beacon_num]
-            dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
-        self.current_idx += 1
+        dists = []
+        if beacon_num != -1:
+            for disc_num in range(self.num_discs_):
+                pos = self.discs_[disc_num][:2] - self.beacons_[beacon_num]
+                dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
+        else:
+            for disc_num in range(self.num_discs_):
+                pos = self.states_[idx][disc_num][:2] - self.beacons_[beacon_num]
+                dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
         return np.asarray(dists + noise)
 
     def play(self):
         animator = Animator(self.env_size_, self.beacons_)
-        for reading in self.readings_:
-            animator.set_data(reading)
+        for state in self.states_:
+            animator.set_data(state)
 
 
 class DatasetSeq:
@@ -112,10 +113,10 @@ class DatasetSeq:
         dt=1,
     ):
         self.sequences_ = []
-        self.current_idx = 0
         if create:
             self.num_sequences_ = num_sequences
             self.sequence_length_ = sequence_length
+            self.length_ = self.sequence_length_ * self.num_sequences_
             self.env_size_ = env_size
             self.num_discs_ = num_discs
             self.num_beacons_ = num_beacons
@@ -123,8 +124,8 @@ class DatasetSeq:
             self.dt_ = dt
             self.create_dataset()
 
-    def get_sequence_settings(self, sequence_index):
-        return self.dataset_[sequence_index][0]
+    def get_sequence_settings(self, idx):
+        return self.dataset_[idx][0]
 
     def create_dataset(self):
         # dataset = []
@@ -142,7 +143,7 @@ class DatasetSeq:
 
             for frame in range(self.sequence_length_):
                 sim.update_step(1)
-                seq.add_reading(sim.get_discs())
+                seq.add_state(sim.get_discs())
 
             self.sequences_.append(seq)
 
@@ -180,30 +181,50 @@ class DatasetSeq:
             self.mode_ = settings[3]
             self.num_sequences_ = settings[4]
             self.sequence_length_ = settings[5]
-
+            self.length_ = self.sequence_length_ * self.num_sequences_
             self.sequences_ = np.load(f, allow_pickle=True)
 
-    def get_sequence(self, seq_idx=None):
-        idx = self.current_idx if seq_idx is None else seq_idx
+    def get_sequence(self, idx):
         return self.sequences_[idx]
+
+    def get_length(self):
+        return self.length_
+
+    def get_item(self, idx):
+        seq_idx = math.floor((idx / self.length_) * self.num_sequences_)
+        seq = self.get_sequence(seq_idx)
+        frame_idx = idx - (seq_idx * seq.get_length())
+        measument = seq.get_distance(-1, frame_idx)
+        state = seq.get_state(frame_idx)
+
+        sample = {
+            "state": state,
+            "measurement": measument,
+            "setting": seq.get_settings(),
+        }
 
 
 class PFDataset(Dataset):
     """PF torch dataset."""
 
     def __init__(self, path):
-        pass
+        self.datasetSeq = DatasetSeq()
+        self.datasetSeq.load_dataset(path)
 
     def __len__(self):
-        pass
+        return self.datasetSeq.get_length()
 
     def __getitem__(self, idx):
-        pass
+        return self.datasetSeq.get_item(idx)
 
 
-if __name__ == "__main__":
-    set = DatasetSeq(create=True)
-    set.save_dataset()
+# TODO
+# incorporate mode in model?
+# fix constant sequence length
+#
+# if __name__ == "__main__":
+# set = DatasetSeq(create=True)
+# set.save_dataset()
 
-    # set = DatasetSeq()
-    # set.load_dataset()
+# set = DatasetSeq()
+# set.load_dataset()

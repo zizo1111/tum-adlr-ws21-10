@@ -2,7 +2,7 @@ import torch
 import torch.distributions as D
 import torch.nn as nn
 
-from models.observation_model import ObservationModel
+from pf.models.observation_model import ObservationModel
 
 
 class DiffParticleFilter(nn.Module):
