@@ -6,7 +6,13 @@ from pf.models.observation_model import ObservationModel
 
 
 class DiffParticleFilter(nn.Module):
-    def __init__(self, hparams, motion_model, observation_model):
+    def __init__(
+        self,
+        hparams,
+        motion_model,
+        observation_model,
+        estimation_method="weighted_average",
+    ):
         super().__init__()
 
         self.hparams = hparams
@@ -17,6 +23,7 @@ class DiffParticleFilter(nn.Module):
         self.particle_states = torch.Tensor
         self.weights = torch.Tensor
 
+        self.estimation_method = estimation_method
         self._init_beliefs()
 
     def _init_beliefs(self):
@@ -73,3 +80,14 @@ class DiffParticleFilter(nn.Module):
         assert torch.allclose(
             torch.sum(self.weights, dim=1, keepdim=True), torch.ones(N)
         )
+
+        # compute output
+        if self.estimation_method == "weighted_average":
+            self.estimates = torch.sum(
+                self.weights[:, :, None] * self.particle_states, dim=1
+            )
+        # TODO add other estimation methods e.g. max etc.
+
+        assert self.estimates.shape == (N, state_dim)
+
+        return self.estimates
