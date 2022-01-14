@@ -61,7 +61,9 @@ class ObservationModel(nn.Module):
     ) -> torch.Tensor:
         N = particle_states.shape[0]  # batch size
         M = particle_states.shape[1]  # number of particles
-        beacon_repeated = np.tile(beacon_positions.reshape(-1), (N, M, 1))
+        beacon_repeated = np.tile(
+            beacon_positions.reshape(N, -1)[:, np.newaxis], (1, M, 1)
+        )
         measurement_repeated = np.tile(measurement[:, np.newaxis], (1, M, 1))
         concat = np.concatenate(
             (particle_states.detach().numpy(), beacon_repeated, measurement_repeated),

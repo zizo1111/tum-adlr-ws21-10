@@ -1,8 +1,7 @@
 import numpy as np
 import math
+from torch.utils.data import Dataset
 import torch
-import matplotlib.pyplot as plt
-from torch.utils.data import Dataset, DataLoader
 from pf.simulation.simulation_env import SimulationEnv
 from pf.simulation.animation import Animator
 
@@ -26,7 +25,7 @@ class Sequence:
             "env_size": self.env_size_,
             "num_discs": self.num_discs_,
             "num_beacons": self.num_beacons_,
-            "beacons_pos": self.beacons_,
+            "beacons_pos": self.beacons_.astype(np.float32),
             "mode": self.mode_,
             "dt": self.dt_,
         }
@@ -109,7 +108,7 @@ class DatasetSeq:
         env_size=200,
         num_discs=1,
         num_beacons=2,
-        mode="random",
+        mode="collide",
         dt=1,
     ):
         self.sequences_ = []
@@ -194,14 +193,15 @@ class DatasetSeq:
         seq_idx = math.floor((idx / self.length_) * self.num_sequences_)
         seq = self.get_sequence(seq_idx)
         frame_idx = idx - (seq_idx * seq.get_length())
-        measument = seq.get_distance(-1, frame_idx)
+        measurement = seq.get_distance(-1, frame_idx)
         state = seq.get_state(frame_idx)
 
         sample = {
-            "state": state,
-            "measurement": measument,
+            "state": torch.from_numpy(state.astype(np.float32)),
+            "measurement": torch.from_numpy(measurement.astype(np.float32)),
             "setting": seq.get_settings(),
         }
+        return sample
 
 
 class PFDataset(Dataset):

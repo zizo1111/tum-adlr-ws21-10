@@ -53,7 +53,7 @@ class DiffParticleFilter(nn.Module):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
 
-    def forward(self, measurement):
+    def forward(self, measurement, beacon_positions):
         N = self.hparams["batch_size"]
         M = self.hparams["num_particles"]
         state_dim = self.hparams["state_dimension"]
@@ -65,7 +65,7 @@ class DiffParticleFilter(nn.Module):
         # Apply observation model to get the likelihood for each particle
         input_obs = self.observation_model.prepare_input(
             self.particle_states[:, :, 0:2],
-            self.hparams["beacon_positions"],
+            beacon_positions,
             measurement,
         )
         observation_lik = self.observation_model(input_obs)

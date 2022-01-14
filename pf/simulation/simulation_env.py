@@ -271,7 +271,11 @@ class SimulationEnv:
         measurement : np.array
         """
         measurment = []
+        state = []
         for i in range(N):
             measurment.append(self.get_distance(-1))
+            state.append(self.discs_)
             self.update_step()
-        return np.array(measurment)
+        return np.array(measurment).astype(np.float32), np.array(state).astype(
+            np.float32
+        )
