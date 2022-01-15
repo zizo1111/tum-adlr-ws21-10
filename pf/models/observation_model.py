@@ -12,8 +12,9 @@ class Lambda(nn.Module):
     def forward(self, x):
         return self.func(x)
 
-    def backward(self, x):
-        return self.dfunc(x)
+    # not needed
+    # def backward(self, x):
+    #     return self.dfunc(x)
 
 
 class ObservationModel(nn.Module):
@@ -52,24 +53,24 @@ class ObservationModel(nn.Module):
         )
 
     def forward(self, x: torch.Tensor):
-        x = x.to(self.device)
+        out = self.model(x)
         # to pass asserts
-        return self.model(x)[:, :, -1]
+        return torch.squeeze(out)
 
     def prepare_input(
         self, particle_states, beacon_positions, measurement
     ) -> torch.Tensor:
         N = particle_states.shape[0]  # batch size
         M = particle_states.shape[1]  # number of particles
-        beacon_repeated = np.tile(
-            beacon_positions.reshape(N, -1)[:, np.newaxis], (1, M, 1)
+        beacon_repeated = torch.tile(
+            beacon_positions.clone().reshape(N, -1)[:, None], (1, M, 1)
         )
-        measurement_repeated = np.tile(measurement[:, np.newaxis], (1, M, 1))
-        concat = np.concatenate(
-            (particle_states.detach().numpy(), beacon_repeated, measurement_repeated),
+        measurement_repeated = torch.tile(measurement.clone()[:, None], (1, M, 1))
+        concat = torch.cat(
+            (particle_states, beacon_repeated, measurement_repeated),
             axis=2,
         )
-        return torch.from_numpy(concat).float()
+        return concat
 
     def measure(
         self,

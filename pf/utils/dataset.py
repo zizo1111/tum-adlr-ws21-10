@@ -36,9 +36,15 @@ class Sequence:
 
     def get_state(self, idx):
         if idx != -1:
-            return self.states_[idx]
+            return np.array(self.states_[idx])
         else:
-            return self.states_
+            return np.array(self.states_)
+
+    def get_measurements(self):
+        measurements = []
+        for idx in range(len(self.states_)):
+            measurements.append(self.get_distance(-1, idx))
+        return np.array(measurements)
 
     def get_beacons_pos(self):
         """
@@ -103,8 +109,8 @@ class DatasetSeq:
     def __init__(
         self,
         create=False,
-        num_sequences=10,
-        sequence_length=1000,
+        num_sequences=100,
+        sequence_length=100,
         env_size=200,
         num_discs=1,
         num_beacons=2,
@@ -186,36 +192,50 @@ class DatasetSeq:
     def get_sequence(self, idx):
         return self.sequences_[idx]
 
-    def get_length(self):
-        return self.length_
+    def get_length(self, getSequence=False):
+        if getSequence:
+            return self.num_sequences_
+        else:
+            return self.length_
 
-    def get_item(self, idx):
-        seq_idx = math.floor((idx / self.length_) * self.num_sequences_)
-        seq = self.get_sequence(seq_idx)
-        frame_idx = idx - (seq_idx * seq.get_length())
-        measurement = seq.get_distance(-1, frame_idx)
-        state = seq.get_state(frame_idx)
+    def get_item(self, idx, getSequence=False):
+        if getSequence:
+            seq = self.get_sequence(idx)
+            sample = {
+                "state": torch.from_numpy(seq.get_state(-1).astype(np.float32)),
+                "measurement": torch.from_numpy(
+                    seq.get_measurements().astype(np.float32)
+                ),
+                "setting": seq.get_settings(),
+            }
+        else:
+            seq_idx = math.floor((idx / self.length_) * self.num_sequences_)
+            seq = self.get_sequence(seq_idx)
+            frame_idx = idx - (seq_idx * seq.get_length())
+            measurement = seq.get_distance(-1, frame_idx)
+            state = seq.get_state(frame_idx)
 
-        sample = {
-            "state": torch.from_numpy(state.astype(np.float32)),
-            "measurement": torch.from_numpy(measurement.astype(np.float32)),
-            "setting": seq.get_settings(),
-        }
+            sample = {
+                "state": torch.from_numpy(state.astype(np.float32)),
+                "measurement": torch.from_numpy(measurement.astype(np.float32)),
+                "setting": seq.get_settings(),
+            }
         return sample
 
 
 class PFDataset(Dataset):
     """PF torch dataset."""
 
-    def __init__(self, path):
-        self.datasetSeq = DatasetSeq()
-        self.datasetSeq.load_dataset(path)
+    def __init__(self, path, getSequence=False):
+        self.datasetSeq_ = DatasetSeq()
+        self.datasetSeq_.load_dataset(path)
+        self.getSequence_ = getSequence
 
     def __len__(self):
-        return self.datasetSeq.get_length()
+        return self.datasetSeq_.get_length(self.getSequence_)
 
     def __getitem__(self, idx):
-        return self.datasetSeq.get_item(idx)
+        return self.datasetSeq_.get_item(idx, self.getSequence_)
 
 
 # TODO

@@ -74,7 +74,7 @@ def run_diff_filter():
         mode=mode,
     )
     observation_model = ObservationModel(
-        state_dimension=2,
+        state_dimension=state_dim,
         env_size=env_size,
         num_particles=num_particles,
         num_beacons=num_beacons,

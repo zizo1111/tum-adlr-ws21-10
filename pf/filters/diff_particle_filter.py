@@ -59,12 +59,18 @@ class DiffParticleFilter(nn.Module):
         state_dim = self.hparams["state_dimension"]
 
         # Apply motion model to predict next particle states
+        # TODO FIX:RuntimeError: one of the variables needed for gradient computation has been
+        # modified by an inplace operation: [torch.FloatTensor [100]] is at version 2; expected
+        #  version 1 instead. Hint: the backtrace further above shows the operation that failed
+        #  to compute its gradient. The variable in question was changed in there or anywhere later.
+        #  Good luck! -> coming from the motion_model forward
+
         self.particle_states = self.motion_model.forward(self.particle_states)
         assert self.particle_states.shape == (N, M, state_dim)
 
         # Apply observation model to get the likelihood for each particle
         input_obs = self.observation_model.prepare_input(
-            self.particle_states[:, :, 0:2],
+            self.particle_states,
             beacon_positions,
             measurement,
         )
@@ -72,10 +78,23 @@ class DiffParticleFilter(nn.Module):
         assert observation_lik.shape == (N, M)
 
         # Update particle weights
-        self.weights *= observation_lik
-        self.weights /= torch.sum(
-            self.weights, dim=1, keepdim=True
-        )  # TODO: change to `logsumexp` if log weights used
+        self.weights = torch.mul(self.weights.clone(), observation_lik)
+        self.weights = torch.div(
+            self.weights.clone().detach(),
+            torch.sum(self.weights.clone().detach(), dim=1, keepdim=True),
+        )
+
+        ## changed this because it was causing
+        # RuntimeError: one of the variables needed for gradient computation has been modified
+        # by an inplace operation: [torch.FloatTensor [16, 1]], which is output 0 of AsStridedBackward0,
+        # is at version 3; expected version 2 instead. Hint: the backtrace further above shows the operation
+        # that failed to compute its gradient. The variable in question was changed in there
+        # or anywhere later. Good luck!
+
+        # self.weights *= observation_lik
+        # self.weights /= torch.sum(
+        #     self.weights, dim=1, keepdim=True
+        # )  # TODO: change to `logsumexp` if log weights used
         assert self.weights.shape == (N, M)
         assert torch.allclose(
             torch.sum(self.weights, dim=1, keepdim=True), torch.ones(N)

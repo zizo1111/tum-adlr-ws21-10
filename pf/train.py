@@ -11,32 +11,34 @@ from pf.models.observation_model import ObservationModel
 def train_epoch(train_loader, model, loss_fn, optimizer):
     running_loss = 0.0
     last_loss = 0.0
+    with torch.autograd.set_detect_anomaly(True):
+        for i, data in enumerate(train_loader):
+            state = data["state"]
+            measurement = data["measurement"]
+            setting = data["setting"]
 
-    for i, data in enumerate(train_loader):
-        state = data["state"]
-        measurement = data["measurement"]
-        setting = data["setting"]
+            # Zero your gradients for every batch!
+            optimizer.zero_grad()
 
-        # Zero your gradients for every batch!
-        optimizer.zero_grad()
+            # Make predictions for this batch
+            outputs = model(measurement, setting["beacons_pos"])
 
-        # Make predictions for this batch
-        outputs = model(measurement, setting["beacons_pos"])
+            # Compute the loss and its gradients
+            N = state.shape[0]  # batch_size
+            state_reshaped = state.reshape(N, -1)
+            loss = F.mse_loss(outputs, state_reshaped)
 
-        # Compute the loss and its gradients
-        N = state.shape[0]  # batch_size
-        state_reshaped = state.reshape(N, -1)
-        loss = F.mse_loss(outputs, state_reshaped)
-        loss.backward()
+            # retain_graph=True for debugging
+            loss.backward(retain_graph=True)
 
-        # Adjust learning weights
-        optimizer.step()
+            # Adjust learning weights
+            optimizer.step()
 
-        running_loss += loss.item()
-        if i % 1000 == 999:
-            last_loss = running_loss / 1000  # loss per batch
-            print("  batch {} loss: {}".format(i + 1, last_loss))
-            running_loss = 0.0
+            running_loss += loss.item()
+            if i % 100 == 99:
+                last_loss = running_loss / 100
+                print("  batch {} loss: {}".format(i + 1, last_loss))
+                running_loss = 0.0
 
     return last_loss
 
@@ -59,7 +61,7 @@ def train(train_set, val_set=None, test_set=None):
         mode=mode,
     )
     observation_model = ObservationModel(
-        state_dimension=2,
+        state_dimension=state_dim,
         env_size=env_size,
         num_particles=num_particles,
         num_beacons=num_beacons,
@@ -74,7 +76,7 @@ def train(train_set, val_set=None, test_set=None):
         "batch_size": 8,
     }
 
-    model = DiffParticleFilter(
+    pf_model = DiffParticleFilter(
         hparams=hparams,
         motion_model=dynamics_model,
         observation_model=observation_model,
@@ -87,13 +89,13 @@ def train(train_set, val_set=None, test_set=None):
     # TODO loss
     loss_fn = RMSE
     # TODO change optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(pf_model.parameters(), lr=1e-3)
 
     EPOCHS = 1
-    model.train(True)
+    pf_model.train(True)
 
     for i in range(EPOCHS):
-        epoch_loss = train_epoch(train_dataloader, model, loss_fn, optimizer)
+        epoch_loss = train_epoch(train_dataloader, pf_model, loss_fn, optimizer)
         print(epoch_loss)
 
 
