@@ -13,6 +13,8 @@ class MotionModel(nn.Module):
         self.env_size = env_size
         self.mode = mode
 
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         # Apply motion model per batch element + per each particle
         # -> shared weights for each particle
         self.model = nn.Sequential(
@@ -79,7 +81,7 @@ class MotionModel(nn.Module):
     def forward(self, particle_states: torch.Tensor):
         N = particle_states.shape[0]  # batch size
         M = particle_states.shape[1]  # number of particles
-        # particle_states = particle_states.to(self.device)  # TODO: uncomment for training
+        particle_states = particle_states.to(self.device)  # TODO: uncomment for training (?)
 
         x = self.model(particle_states)
 
@@ -98,13 +100,16 @@ class MotionModel(nn.Module):
         predicted_tril[:, :, tril_indices[0], tril_indices[1]] = predicted_lower_diag
 
         # Apply threshold to get only positive values on the diagonal -> to satisfy the constraint LowerCholesky()
-        F.threshold(torch.diagonal(predicted_tril, offset=0, dim1=2, dim2=3), threshold=0, value=1.e-5, inplace=True)
-        assert predicted_tril.shape == (N, M, self.state_dimension, self.state_dimension)
+        #F.threshold(torch.diagonal(predicted_tril, offset=0, dim1=2, dim2=3), threshold=0, value=1.e-5, inplace=True)
+        # Or just make values on the diagonal absolute
+        predicted_tril_cholesky = predicted_tril
+        predicted_tril_cholesky.diagonal(dim1=2, dim2=3).abs_()
+        assert predicted_tril_cholesky.shape == (N, M, self.state_dimension, self.state_dimension)
 
         # Sample (with gradient) from the resulting distribution -> "reparameterization trick"
         predicted_particle_states = D.MultivariateNormal(
             loc=predicted_mean,
-            scale_tril=predicted_tril,
+            scale_tril=predicted_tril_cholesky,
         ).rsample()
 
         return predicted_particle_states
