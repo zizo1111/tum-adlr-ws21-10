@@ -65,7 +65,7 @@ class DiffParticleFilter(nn.Module):
         #  to compute its gradient. The variable in question was changed in there or anywhere later.
         #  Good luck! -> coming from the motion_model forward
 
-        self.particle_states = self.motion_model.forward(self.particle_states)
+        self.particle_states = self.motion_model.forward(self.particle_states.clone().detach())
         assert self.particle_states.shape == (N, M, state_dim)
 
         # Apply observation model to get the likelihood for each particle

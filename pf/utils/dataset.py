@@ -209,7 +209,7 @@ class DatasetSeq:
                 "setting": seq.get_settings(),
             }
         else:
-            seq_idx = math.floor((idx / self.length_) * self.num_sequences_)
+            seq_idx = (int)(round((idx / self.length_) * self.num_sequences_, 3))
             seq = self.get_sequence(seq_idx)
             frame_idx = idx - (seq_idx * seq.get_length())
             measurement = seq.get_distance(-1, frame_idx)

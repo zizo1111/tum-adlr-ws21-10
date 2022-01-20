@@ -11,34 +11,36 @@ from pf.models.observation_model import ObservationModel
 def train_epoch(train_loader, model, loss_fn, optimizer):
     running_loss = 0.0
     last_loss = 0.0
-    with torch.autograd.set_detect_anomaly(True):
-        for i, data in enumerate(train_loader):
-            state = data["state"]
-            measurement = data["measurement"]
-            setting = data["setting"]
 
-            # Zero your gradients for every batch!
-            optimizer.zero_grad()
+    #with torch.autograd.set_detect_anomaly(True):
+    for i, data in enumerate(train_loader):
+        #print(i)
+        state = data["state"]
+        measurement = data["measurement"]
+        setting = data["setting"]
 
-            # Make predictions for this batch
-            outputs = model(measurement, setting["beacons_pos"])
+        # Zero your gradients for every batch!
+        optimizer.zero_grad()
 
-            # Compute the loss and its gradients
-            N = state.shape[0]  # batch_size
-            state_reshaped = state.reshape(N, -1)
-            loss = F.mse_loss(outputs, state_reshaped)
+        # Make predictions for this batch
+        outputs = model(measurement, setting["beacons_pos"])
 
-            # retain_graph=True for debugging
-            loss.backward(retain_graph=True)
+        # Compute the loss and its gradients
+        N = state.shape[0]  # batch_size
+        state_reshaped = state.reshape(N, -1)
+        loss = F.mse_loss(outputs, state_reshaped)
+        #loss.requires_grad=True
+        # retain_graph=True for debugging
+        loss.backward()
 
-            # Adjust learning weights
-            optimizer.step()
+        # Adjust learning weights
+        optimizer.step()
 
-            running_loss += loss.item()
-            if i % 100 == 99:
-                last_loss = running_loss / 100
-                print("  batch {} loss: {}".format(i + 1, last_loss))
-                running_loss = 0.0
+        running_loss += loss.item()
+        if i % 100 == 99:
+            last_loss = running_loss / 100
+            print("  batch {} loss: {}".format(i + 1, last_loss))
+            running_loss = 0.0
 
     return last_loss
 
@@ -91,12 +93,15 @@ def train(train_set, val_set=None, test_set=None):
     # TODO change optimizer
     optimizer = torch.optim.Adam(pf_model.parameters(), lr=1e-3)
 
-    EPOCHS = 1
+    EPOCHS = 5
+    print(pf_model)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    pf_model.to(device)
     pf_model.train(True)
 
     for i in range(EPOCHS):
         epoch_loss = train_epoch(train_dataloader, pf_model, loss_fn, optimizer)
-        print(epoch_loss)
+        print('Epoch {}, loss: {}'.format(i +1, epoch_loss))
 
 
 if __name__ == "__main__":
