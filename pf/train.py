@@ -1,3 +1,4 @@
+from operator import imod
 import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
@@ -6,9 +7,11 @@ from pf.utils.dataset import PFDataset, DatasetSeq, Sequence
 from pf.utils.loss import RMSE
 from pf.models.motion_model import MotionModel
 from pf.models.observation_model import ObservationModel
+from pf.simulation.animation import Animator
+from torch.utils.tensorboard import SummaryWriter
 
 
-def train_epoch(train_loader, model, loss_fn, optimizer):
+def train_epoch(train_loader, model, loss_fn, optimizer, writer, epoch):
     running_loss = 0.0
     last_loss = 0.0
 
@@ -28,9 +31,12 @@ def train_epoch(train_loader, model, loss_fn, optimizer):
         # Compute the loss and its gradients
         N = state.shape[0]  # batch_size
         state_reshaped = state.reshape(N, -1)
-        loss = F.mse_loss(outputs, state_reshaped)
-        #loss.requires_grad=True
-        # retain_graph=True for debugging
+
+        #MSE loss
+        #loss = F.mse_loss(outputs, state_reshaped)
+
+        # RMSE loss
+        loss = loss_fn(outputs, state_reshaped)
         loss.backward()
 
         # Adjust learning weights
@@ -41,7 +47,23 @@ def train_epoch(train_loader, model, loss_fn, optimizer):
             last_loss = running_loss / 100
             print("  batch {} loss: {}".format(i + 1, last_loss))
             running_loss = 0.0
+            
+            env = setting['env_size'].clone().detach().numpy()[0]
+            beac_pos = setting['beacons_pos'].clone().detach().numpy()[0]
+            st = state_reshaped.clone().detach().numpy()[0].reshape(1,4)
+            est = outputs.clone().detach().numpy()[0].reshape(1,4)
+            animator = Animator(env, beac_pos, show=False)
+            _ = animator.set_data(
+                st,
+                estimate = est,
+            )
 
+            writer.add_scalar('training loss',
+                            last_loss / 100,
+                            epoch * len(train_loader) + i)
+            writer.add_figure('estimation vs. actual',
+                            animator.get_figure(),
+                            global_step=epoch * len(train_loader) + i)
     return last_loss
 
 
@@ -93,14 +115,15 @@ def train(train_set, val_set=None, test_set=None):
     # TODO change optimizer
     optimizer = torch.optim.Adam(pf_model.parameters(), lr=1e-3)
 
-    EPOCHS = 5
+    EPOCHS = 100
     print(pf_model)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     pf_model.to(device)
     pf_model.train(True)
 
+    writer = SummaryWriter('runs/exp1')
     for i in range(EPOCHS):
-        epoch_loss = train_epoch(train_dataloader, pf_model, loss_fn, optimizer)
+        epoch_loss = train_epoch(train_dataloader, pf_model, loss_fn, optimizer, writer, i)
         print('Epoch {}, loss: {}'.format(i +1, epoch_loss))
 
 

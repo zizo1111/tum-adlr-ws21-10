@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 
 
 class Animator:
-    def __init__(self, size, beacons):
+    def __init__(self, size, beacons, show=True):
         self.env_size_ = size
         self.fig = plt.figure()
-
+        self.show = show
         self.beacons_ = beacons
         self.discs_ = None
 
@@ -87,13 +87,18 @@ class Animator:
         if estimate is not None:
             self.estimate_ = estimate
         self.plot_fig()
-        cv2.imshow("Simulation", self.convert(self.fig))
 
-        if cv2.waitKey(10) == 27:
-            cv2.destroyAllWindows()
-            return False
+        if self.show:
+            cv2.imshow("Simulation", self.convert(self.fig))
+
+            if cv2.waitKey(10) == 27:
+                cv2.destroyAllWindows()
+                return False
 
         return True
+    
+    def get_figure(self):
+        return self.fig
 
     def convert(self, fig):
         """

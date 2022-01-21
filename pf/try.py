@@ -100,7 +100,7 @@ def run_diff_filter():
     # TODO: where are we supposed to get measurement from?
     # Num of measurements = Batch size
     # in test does it make sense to have batch number > 1
-    es = diff_particle_filter(measurement, beacon_positions)
+    es = diff_particle_filter(torch.from_numpy(measurement), torch.from_numpy(beacon_positions))
 
     loss = F.mse_loss(es, torch.from_numpy(state.reshape(8, -1)))
     loss.backward()
