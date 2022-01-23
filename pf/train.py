@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from pf.filters.diff_particle_filter import DiffParticleFilter
 from pf.utils.dataset import PFDataset, DatasetSeq, Sequence
-from pf.utils.loss import RMSE
+from pf.utils.loss import RMSE, NLL
 from pf.models.motion_model import MotionModel
 from pf.models.observation_model import ObservationModel
 from pf.simulation.animation import Animator
@@ -15,9 +15,9 @@ def train_epoch(train_loader, model, loss_fn, optimizer, writer, epoch):
     running_loss = 0.0
     last_loss = 0.0
 
-    #with torch.autograd.set_detect_anomaly(True):
+    # with torch.autograd.set_detect_anomaly(True):
     for i, data in enumerate(train_loader):
-        #print(i)
+        # print(i)
         state = data["state"]
         measurement = data["measurement"]
         setting = data["setting"]
@@ -26,17 +26,18 @@ def train_epoch(train_loader, model, loss_fn, optimizer, writer, epoch):
         optimizer.zero_grad()
 
         # Make predictions for this batch
-        outputs = model(measurement, setting["beacons_pos"])
+        estimate, weights, particles_states = model(measurement, setting["beacons_pos"])
 
         # Compute the loss and its gradients
         N = state.shape[0]  # batch_size
         state_reshaped = state.reshape(N, -1)
 
-        #MSE loss
-        #loss = F.mse_loss(outputs, state_reshaped)
+        # MSE loss
+        # loss = F.mse_loss(outputs, state_reshaped)
 
         # RMSE loss
-        loss = loss_fn(outputs, state_reshaped)
+        loss = loss_fn(estimate, state_reshaped)
+        # loss = NLL(estimate, state, weights, particles_states)
         loss.backward()
 
         # Adjust learning weights
@@ -47,23 +48,25 @@ def train_epoch(train_loader, model, loss_fn, optimizer, writer, epoch):
             last_loss = running_loss / 100
             print("  batch {} loss: {}".format(i + 1, last_loss))
             running_loss = 0.0
-            
-            env = setting['env_size'].clone().detach().numpy()[0]
-            beac_pos = setting['beacons_pos'].clone().detach().numpy()[0]
-            st = state_reshaped.clone().detach().numpy()[0].reshape(1,4)
-            est = outputs.clone().detach().numpy()[0].reshape(1,4)
+
+            env = setting["env_size"].clone().detach().numpy()[0]
+            beac_pos = setting["beacons_pos"].clone().detach().numpy()[0]
+            st = state_reshaped.clone().detach().numpy()[0].reshape(1, 4)
+            est = estimate.clone().detach().numpy()[0].reshape(1, 4)
             animator = Animator(env, beac_pos, show=False)
             _ = animator.set_data(
                 st,
-                estimate = est,
+                estimate=est,
             )
 
-            writer.add_scalar('training loss',
-                            last_loss / 100,
-                            epoch * len(train_loader) + i)
-            writer.add_figure('estimation vs. actual',
-                            animator.get_figure(),
-                            global_step=epoch * len(train_loader) + i)
+            writer.add_scalar(
+                "training loss", last_loss / 100, epoch * len(train_loader) + i
+            )
+            writer.add_figure(
+                "estimation vs. actual",
+                animator.get_figure(),
+                global_step=epoch * len(train_loader) + i,
+            )
     return last_loss
 
 
@@ -121,10 +124,12 @@ def train(train_set, val_set=None, test_set=None):
     pf_model.to(device)
     pf_model.train(True)
 
-    writer = SummaryWriter('runs/exp1')
+    writer = SummaryWriter("runs/exp1")
     for i in range(EPOCHS):
-        epoch_loss = train_epoch(train_dataloader, pf_model, loss_fn, optimizer, writer, i)
-        print('Epoch {}, loss: {}'.format(i +1, epoch_loss))
+        epoch_loss = train_epoch(
+            train_dataloader, pf_model, loss_fn, optimizer, writer, i
+        )
+        print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
 
 
 if __name__ == "__main__":
