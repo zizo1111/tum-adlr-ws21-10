@@ -22,8 +22,8 @@ class DiffParticleFilter(nn.Module):
         self.resample = resample
         self.observation_model.apply(self.initialize_weight)
 
-        self.particle_states = torch.Tensor
-        self.weights = torch.Tensor
+        self.particle_states: torch.Tensor
+        self.weights: torch.Tensor
 
         self.estimation_method = estimation_method
         self._init_beliefs()
@@ -80,11 +80,13 @@ class DiffParticleFilter(nn.Module):
         assert observation_lik.shape == (N, M)
 
         # Update particle weights
-        self.weights = torch.mul(self.weights.clone(), observation_lik)
-        self.weights = torch.div(
-            self.weights.clone().detach(),
-            torch.sum(self.weights.clone().detach(), dim=1, keepdim=True),
-        )
+        # self.weights = torch.mul(self.weights.clone(), observation_lik)
+        # self.weights = torch.div(
+        #     self.weights.clone().detach(),
+        #     torch.sum(self.weights.clone().detach(), dim=1, keepdim=True),
+        # )
+        ## ^ seems like not needed anymore
+        ## | as we have already fixed the following problem:
 
         ## changed this because it was causing
         # RuntimeError: one of the variables needed for gradient computation has been modified
@@ -93,10 +95,10 @@ class DiffParticleFilter(nn.Module):
         # that failed to compute its gradient. The variable in question was changed in there
         # or anywhere later. Good luck!
 
-        # self.weights *= observation_lik
-        # self.weights /= torch.sum(
-        #     self.weights, dim=1, keepdim=True
-        # )  # TODO: change to `logsumexp` if log weights used
+        self.weights *= observation_lik
+        self.weights /= torch.sum(
+            self.weights, dim=1, keepdim=True
+        )  # TODO: change to `logsumexp` if log weights used
         assert self.weights.shape == (N, M)
         assert torch.allclose(
             torch.sum(self.weights, dim=1, keepdim=True), torch.ones(N)
