@@ -1,8 +1,32 @@
-import torch
 import math
+
+import torch
+import torch.nn as nn
+
+
+def MSE(estimate, gt):
+    """
+    Computes Mean Squared Error (MSE) loss.
+
+    :param estimate: Current state estimate, returned by the diff. PF model
+    :param gt: Ground truth state of the disc
+    :return: MSE loss
+    """
+    fn = nn.MSELoss(reduction='mean')
+    return fn(estimate, gt)
 
 
 def RMSE(estimate, gt):
+    """
+    Returns Root Mean Square Error (RMSE) loss.
+    Note: This is not comparable to the standard PF error! There, we compute:
+        * RMSE only for the disc position (effectively first two state dimensions)
+        * Mean over the previous timesteps
+
+    :param estimate: Current state estimate, returned by the diff. PF model
+    :param gt: Ground truth state of the disc
+    :return: RMSE loss
+    """
     return torch.sqrt(torch.mean((estimate - gt) ** 2))
 
 

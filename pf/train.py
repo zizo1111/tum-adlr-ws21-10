@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from pf.filters.diff_particle_filter import DiffParticleFilter
 from pf.utils.dataset import PFDataset, DatasetSeq, Sequence
-from pf.utils.loss import RMSE, NLL
+from pf.utils.loss import MSE, RMSE, NLL
 from pf.models.motion_model import MotionModel
 from pf.models.observation_model import ObservationModel
 from pf.simulation.animation import Animator
@@ -113,8 +113,10 @@ def train(train_set, val_set=None, test_set=None):
         train_set, batch_size=hparams["batch_size"], shuffle=False, num_workers=0
     )
 
-    # TODO loss
-    loss_fn = RMSE
+    losses = [MSE, RMSE, NLL]
+    loss_fn = MSE
+    assert loss_fn in losses
+
     # TODO change optimizer
     optimizer = torch.optim.Adam(pf_model.parameters(), lr=1e-3)
 

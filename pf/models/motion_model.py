@@ -81,7 +81,7 @@ class MotionModel(nn.Module):
     def forward(self, particle_states: torch.Tensor):
         N = particle_states.shape[0]  # batch size
         M = particle_states.shape[1]  # number of particles
-        particle_states = particle_states.to(self.device)  # TODO: uncomment for training (?)
+        particle_states = particle_states.to(self.device)
 
         x = self.model(particle_states)
 
@@ -100,7 +100,9 @@ class MotionModel(nn.Module):
         predicted_tril[:, :, tril_indices[0], tril_indices[1]] = predicted_lower_diag
 
         # Apply threshold to get only positive values on the diagonal -> to satisfy the constraint LowerCholesky()
-        #F.threshold(torch.diagonal(predicted_tril, offset=0, dim1=2, dim2=3), threshold=0, value=1.e-5, inplace=True)
+        ## F.threshold(torch.diagonal(predicted_tril, offset=0, dim1=2, dim2=3), threshold=0, value=1.e-5, inplace=True)
+        # ^was resulting in RuntimeError
+
         # Or just make values on the diagonal absolute
         predicted_tril_cholesky = predicted_tril
         predicted_tril_cholesky.diagonal(dim1=2, dim2=3).abs_()
