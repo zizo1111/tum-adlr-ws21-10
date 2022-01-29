@@ -1,9 +1,10 @@
 import numpy as np
 import math
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 import torch
 from pf.simulation.simulation_env import SimulationEnv
 from pf.simulation.animation import Animator
+from pf.utils.utils import *
 
 
 class Sequence:
@@ -222,6 +223,12 @@ class DatasetSeq:
             }
         return sample
 
+    def get_settings(self):
+        return {
+            "num_sequences": self.num_sequences_,
+            "sequence_length": self.sequence_length_,
+        }
+
 
 class PFDataset(Dataset):
     """PF torch dataset."""
@@ -236,6 +243,33 @@ class PFDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.datasetSeq_.get_item(idx, self.getSequence_)
+
+    def get_settings(self):
+        return self.datasetSeq_.get_settings()
+
+
+class PFSampler(Sampler):
+    def __init__(self, dataset, batch_size=1):
+        self.dataset = dataset
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __iter__(self):
+        if self.batch_size == 1:
+            return iter(range(len(self.dataset)))
+
+        else:
+            settings = self.dataset.get_settings()
+            indices = np.array([range(len(self.dataset))]).reshape(
+                settings["num_sequences"], settings["sequence_length"]
+            )
+            ret = []
+            split_indices = split_given_size(indices, self.batch_size)
+            for i in range(len(split_given_size(indices, self.batch_size))):
+                ret.extend(list(alt_chain(*([list(seq) for seq in split_indices[i]]))))
+            return iter(ret)
 
 
 # TODO

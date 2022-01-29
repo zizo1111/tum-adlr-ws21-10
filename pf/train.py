@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from pf.filters.diff_particle_filter import DiffParticleFilter
-from pf.utils.dataset import PFDataset, DatasetSeq, Sequence
+from pf.utils.dataset import PFDataset, DatasetSeq, Sequence, PFSampler
 from pf.utils.loss import MSE, RMSE, NLL
 from pf.models.motion_model import MotionModel
 from pf.models.observation_model import ObservationModel
@@ -108,9 +108,13 @@ def train(train_set, val_set=None, test_set=None):
         motion_model=dynamics_model,
         observation_model=observation_model,
     )
-
+    sampler = PFSampler(train_set, hparams["batch_size"])
     train_dataloader = DataLoader(
-        train_set, batch_size=hparams["batch_size"], shuffle=False, num_workers=0
+        train_set,
+        batch_size=hparams["batch_size"],
+        shuffle=False,
+        num_workers=0,
+        sampler=sampler,
     )
 
     losses = [MSE, RMSE, NLL]

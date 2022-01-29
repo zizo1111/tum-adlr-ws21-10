@@ -55,7 +55,7 @@ class ObservationModel(nn.Module):
     def forward(self, x: torch.Tensor):
         out = self.model(x)
         # to pass asserts
-        return torch.squeeze(out)
+        return torch.squeeze(out, -1)
 
     def prepare_input(
         self, particle_states, beacon_positions, measurement
