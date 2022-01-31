@@ -86,32 +86,36 @@ class MotionModel(nn.Module):
         x = self.model(particle_states)
 
         # Split to get the mean and covariance matrix separately
-        predicted_mean, predicted_lower_diag = torch.split(
+        predicted_mean, log_predicted_scale_diag, predicted_scale_lower = torch.split(
             x,
-            [self.state_dimension, self.state_dimension * (self.state_dimension + 1) // 2],
+            [self.state_dimension, self.state_dimension, self.state_dimension * (self.state_dimension - 1) // 2],
             dim=2,
         )
         assert predicted_mean.shape == (N, M, self.state_dimension)
-        assert predicted_lower_diag.shape == (N, M, self.state_dimension * (self.state_dimension + 1) // 2)
+        assert log_predicted_scale_diag.shape == (N, M, self.state_dimension)
+        assert predicted_scale_lower.shape == (N, M, self.state_dimension * (self.state_dimension - 1) // 2)
 
-        # Reform to get the tensor of covariance matrices
-        predicted_tril = torch.zeros(N, M, self.state_dimension, self.state_dimension)
-        tril_indices = torch.tril_indices(row=self.state_dimension, col=self.state_dimension, offset=0)
-        predicted_tril[:, :, tril_indices[0], tril_indices[1]] = predicted_lower_diag
+        # Assume our network outputs log(value) -> this way we always get positive values on the diagonal
+        predicted_scale_tril = torch.diag_embed(torch.exp(log_predicted_scale_diag)).to(self.device)
+
+        # Reform to get the lower part (under main diagonal) of the scale
+        lower_tril_indices = torch.tril_indices(row=self.state_dimension, col=self.state_dimension,
+                                                offset=-1, device=self.device)
+        predicted_scale_tril[:, :, lower_tril_indices[0], lower_tril_indices[1]] = predicted_scale_lower
 
         # Apply threshold to get only positive values on the diagonal -> to satisfy the constraint LowerCholesky()
         ## F.threshold(torch.diagonal(predicted_tril, offset=0, dim1=2, dim2=3), threshold=0, value=1.e-5, inplace=True)
         # ^was resulting in RuntimeError
 
         # Or just make values on the diagonal absolute
-        predicted_tril_cholesky = predicted_tril
-        predicted_tril_cholesky.diagonal(dim1=2, dim2=3).abs_()
-        assert predicted_tril_cholesky.shape == (N, M, self.state_dimension, self.state_dimension)
+        ## predicted_tril_cholesky = predicted_tril
+        ## predicted_tril_cholesky.diagonal(dim1=2, dim2=3).abs_()
+        # ^apparently, this also did not work out well
+        assert predicted_scale_tril.shape == (N, M, self.state_dimension, self.state_dimension)
 
         # Sample (with gradient) from the resulting distribution -> "reparameterization trick"
         predicted_particle_states = D.MultivariateNormal(
-            loc=predicted_mean,
-            scale_tril=predicted_tril_cholesky,
+            loc=predicted_mean, scale_tril=predicted_scale_tril,
         ).rsample()
 
         return predicted_particle_states
