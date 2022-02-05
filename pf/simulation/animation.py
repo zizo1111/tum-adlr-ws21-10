@@ -36,7 +36,7 @@ class Animator:
 
         # init particles visualization
         (self.particles_vis,) = self.ax.plot([], [], "b.", ms=1)
-        (self.estimate_vis,) = self.ax.plot([], [], "go", ms=5)
+        (self.estimate_vis,) = self.ax.plot([], [], "go", ms=10)
 
         # rect is the box edge
         self.rect = plt.Rectangle(
@@ -96,7 +96,7 @@ class Animator:
                 return False
 
         return True
-    
+
     def get_figure(self):
         return self.fig
 

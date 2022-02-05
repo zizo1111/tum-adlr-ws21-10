@@ -110,7 +110,7 @@ class DatasetSeq:
     def __init__(
         self,
         create=False,
-        num_sequences=100,
+        num_sequences=1000,
         sequence_length=100,
         env_size=200,
         num_discs=1,

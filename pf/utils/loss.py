@@ -12,7 +12,7 @@ def MSE(estimate, gt):
     :param gt: Ground truth state of the disc
     :return: MSE loss
     """
-    fn = nn.MSELoss(reduction='mean')
+    fn = nn.MSELoss(reduction="mean")
     return fn(estimate, gt)
 
 

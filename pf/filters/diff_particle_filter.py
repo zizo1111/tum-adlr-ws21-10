@@ -26,7 +26,6 @@ class DiffParticleFilter(nn.Module):
         self.weights: torch.Tensor
 
         self.estimation_method = estimation_method
-        self._init_beliefs()
 
     def _init_beliefs(self):
         N = self.hparams["batch_size"]
@@ -34,7 +33,11 @@ class DiffParticleFilter(nn.Module):
         state_dim = self.hparams["state_dimension"]
 
         # Sample particles as GMM
-        mix = D.Categorical(torch.ones(M,))
+        mix = D.Categorical(
+            torch.ones(
+                M,
+            )
+        )
         comp = D.Independent(
             D.Normal(torch.randn(M, state_dim), torch.rand(M, state_dim)), 1
         )
@@ -64,17 +67,14 @@ class DiffParticleFilter(nn.Module):
         #  to compute its gradient. The variable in question was changed in there or anywhere later.
         #  Good luck! -> coming from the motion_model forward
 
-        if self.resample:
-            self.particle_states = self.motion_model.forward(self.particle_states)
-        else:
-            self.particle_states = self.motion_model.forward(
-                self.particle_states.clone().detach()
-            )
+        self.particle_states = self.motion_model.forward(self.particle_states)
         assert self.particle_states.shape == (N, M, state_dim)
 
         # Apply observation model to get the likelihood for each particle
         input_obs = self.observation_model.prepare_input(
-            self.particle_states, beacon_positions, measurement,
+            self.particle_states,
+            beacon_positions,
+            measurement,
         )
         observation_lik = self.observation_model(input_obs)
         assert observation_lik.shape == (N, M)
@@ -110,7 +110,7 @@ class DiffParticleFilter(nn.Module):
         # compute output
         if self.estimation_method == "weighted_average":
             self.estimates = torch.sum(
-                self.weights[:, :, None] * self.particle_states, dim=1
+                self.weights.clone().unsqueeze(-1) * self.particle_states, dim=1
             )
         # TODO add other estimation methods e.g. max etc.
 

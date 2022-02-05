@@ -11,19 +11,19 @@ from pf.simulation.animation import Animator
 from torch.utils.tensorboard import SummaryWriter
 
 
-def train_epoch(train_loader, model, loss_fn, optimizer, writer, epoch):
+def train_epoch(
+    train_loader, model, loss_fn, optimizer, train_set_settings, writer, epoch
+):
     running_loss = 0.0
     last_loss = 0.0
-
+    loss = 0.0
+    seq_len = train_set_settings["sequence_length"]
     # with torch.autograd.set_detect_anomaly(True):
+
     for i, data in enumerate(train_loader):
-        # print(i)
         state = data["state"]
         measurement = data["measurement"]
         setting = data["setting"]
-
-        # Zero your gradients for every batch!
-        optimizer.zero_grad()
 
         # Make predictions for this batch
         estimate, weights, particles_states = model(measurement, setting["beacons_pos"])
@@ -32,20 +32,28 @@ def train_epoch(train_loader, model, loss_fn, optimizer, writer, epoch):
         N = state.shape[0]  # batch_size
         state_reshaped = state.reshape(N, -1)
 
-        # MSE loss
-        # loss = F.mse_loss(outputs, state_reshaped)
+        # RMSE/MSE loss
+        loss += loss_fn(estimate, state_reshaped)
 
-        # RMSE loss
-        loss = loss_fn(estimate, state_reshaped)
-        # loss = NLL(estimate, state, weights, particles_states)
-        loss.backward()
-
-        # Adjust learning weights
-        optimizer.step()
+        # NLL
+        # loss += loss_fn(estimate, state, weights, particles_states)
 
         running_loss += loss.item()
-        if i % 100 == 99:
-            last_loss = running_loss / 100
+        if i % seq_len == seq_len - 1:
+            loss = loss / seq_len
+            loss.backward()
+            # Adjust learning weights
+            optimizer.step()
+
+            # Zero your gradients for every seq!
+            optimizer.zero_grad()
+
+            # re-initialize beliefs
+            model._init_beliefs()
+            # zero the loss to avoid errors
+            loss = 0
+
+            last_loss = running_loss / (seq_len * seq_len)
             print("  batch {} loss: {}".format(i + 1, last_loss))
             running_loss = 0.0
 
@@ -60,7 +68,7 @@ def train_epoch(train_loader, model, loss_fn, optimizer, writer, epoch):
             )
 
             writer.add_scalar(
-                "training loss", last_loss / 100, epoch * len(train_loader) + i
+                "training loss", last_loss / seq_len, epoch * len(train_loader) + i
             )
             writer.add_figure(
                 "estimation vs. actual",
@@ -116,6 +124,8 @@ def train(train_set, val_set=None, test_set=None):
         num_workers=0,
         sampler=sampler,
     )
+    # init weights
+    pf_model._init_beliefs()
 
     losses = [MSE, RMSE, NLL]
     loss_fn = MSE
@@ -129,11 +139,18 @@ def train(train_set, val_set=None, test_set=None):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     pf_model.to(device)
     pf_model.train(True)
+    train_set_settings = train_set.get_settings()
 
     writer = SummaryWriter("runs/exp1")
     for i in range(EPOCHS):
         epoch_loss = train_epoch(
-            train_dataloader, pf_model, loss_fn, optimizer, writer, i
+            train_dataloader,
+            pf_model,
+            loss_fn,
+            optimizer,
+            train_set_settings,
+            writer,
+            i,
         )
         print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
 
