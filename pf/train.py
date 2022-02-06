@@ -127,7 +127,7 @@ def train(train_set, val_set=None, test_set=None):
     assert loss_fn in losses
 
     # TODO change optimizer
-    optimizer = torch.optim.Adam(pf_model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(pf_model.parameters(), lr=5.e-3, weight_decay=1.e-2)
 
     EPOCHS = 100
     print(pf_model)

@@ -23,6 +23,8 @@ class DiffParticleFilter(nn.Module):
         self.motion_model = motion_model
         self.observation_model = observation_model
         self.resample = resample
+
+        self.motion_model.apply(initialize_weight)
         self.observation_model.apply(initialize_weight)
 
         self.particle_states = torch.zeros(size=[])
