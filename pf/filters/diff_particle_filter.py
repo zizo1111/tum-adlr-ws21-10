@@ -2,7 +2,10 @@ import torch
 import torch.distributions as D
 import torch.nn as nn
 
-from pf.models.observation_model import ObservationModel
+
+def initialize_weight(module):
+    if isinstance(module, (nn.Linear, nn.Conv2d)):
+        nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
 
 
 class DiffParticleFilter(nn.Module):
@@ -20,14 +23,18 @@ class DiffParticleFilter(nn.Module):
         self.motion_model = motion_model
         self.observation_model = observation_model
         self.resample = resample
-        self.observation_model.apply(self.initialize_weight)
+        self.observation_model.apply(initialize_weight)
 
-        self.particle_states: torch.Tensor
-        self.weights: torch.Tensor
+        self.particle_states = torch.zeros(size=[])
+        self.weights = torch.zeros(size=[])
 
         self.estimation_method = estimation_method
 
-    def _init_beliefs(self):
+    def init_beliefs(self):
+        """
+        Sample particle states from a GMM, and assign a new set of uniform weights.
+        Note: This should be done at each start of every new sequence.
+        """
         N = self.hparams["batch_size"]
         M = self.hparams["num_particles"]
         state_dim = self.hparams["state_dimension"]
@@ -50,10 +57,6 @@ class DiffParticleFilter(nn.Module):
         self.weights = self.particle_states.new_full((N, M), 1.0 / M)
         assert self.weights.shape == (N, M)
 
-    def initialize_weight(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
-
     def forward(self, measurement, beacon_positions):
         N = self.hparams["batch_size"]
         M = self.hparams["num_particles"]
@@ -61,12 +64,6 @@ class DiffParticleFilter(nn.Module):
         soft_resample_alpha = self.hparams["soft_resample_alpha"]
 
         # Apply motion model to predict next particle states
-        # TODO FIX:RuntimeError: one of the variables needed for gradient computation has been
-        # modified by an inplace operation: [torch.FloatTensor [100]] is at version 2; expected
-        #  version 1 instead. Hint: the backtrace further above shows the operation that failed
-        #  to compute its gradient. The variable in question was changed in there or anywhere later.
-        #  Good luck! -> coming from the motion_model forward
-
         self.particle_states = self.motion_model.forward(self.particle_states)
         assert self.particle_states.shape == (N, M, state_dim)
 
@@ -80,21 +77,6 @@ class DiffParticleFilter(nn.Module):
         assert observation_lik.shape == (N, M)
 
         # Update particle weights
-        # self.weights = torch.mul(self.weights.clone(), observation_lik)
-        # self.weights = torch.div(
-        #     self.weights.clone().detach(),
-        #     torch.sum(self.weights.clone().detach(), dim=1, keepdim=True),
-        # )
-        ## ^ seems like not needed anymore
-        ## | as we have already fixed the following problem:
-
-        ## changed this because it was causing
-        # RuntimeError: one of the variables needed for gradient computation has been modified
-        # by an inplace operation: [torch.FloatTensor [16, 1]], which is output 0 of AsStridedBackward0,
-        # is at version 3; expected version 2 instead. Hint: the backtrace further above shows the operation
-        # that failed to compute its gradient. The variable in question was changed in there
-        # or anywhere later. Good luck!
-
         self.weights *= observation_lik
         self.weights /= torch.sum(
             self.weights, dim=1, keepdim=True

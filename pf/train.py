@@ -16,11 +16,16 @@ def train_epoch(
 ):
     running_loss = 0.0
     last_loss = 0.0
-    loss = 0.0
+    loss = torch.zeros(size=[])
     seq_len = train_set_settings["sequence_length"]
-    # with torch.autograd.set_detect_anomaly(True):
 
     for i, data in enumerate(train_loader):
+        if i % seq_len == 0:
+            # New sequences -> zero everything, and re-initialize beliefs of the PF
+            optimizer.zero_grad()
+            loss = torch.zeros(size=[])
+            model.init_beliefs()
+
         state = data["state"]
         measurement = data["measurement"]
         setting = data["setting"]
@@ -40,18 +45,10 @@ def train_epoch(
 
         running_loss += loss.item()
         if i % seq_len == seq_len - 1:
-            loss = loss / seq_len
+            loss /= seq_len
             loss.backward()
             # Adjust learning weights
             optimizer.step()
-
-            # Zero your gradients for every seq!
-            optimizer.zero_grad()
-
-            # re-initialize beliefs
-            model._init_beliefs()
-            # zero the loss to avoid errors
-            loss = 0
 
             last_loss = running_loss / (seq_len * seq_len)
             print("  batch {} loss: {}".format(i + 1, last_loss))
@@ -124,8 +121,6 @@ def train(train_set, val_set=None, test_set=None):
         num_workers=0,
         sampler=sampler,
     )
-    # init weights
-    pf_model._init_beliefs()
 
     losses = [MSE, RMSE, NLL]
     loss_fn = MSE
