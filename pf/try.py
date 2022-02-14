@@ -48,7 +48,7 @@ def run_filter():
     print(test_env.get_error())
 
 
-def run_diff_filter():
+def run_diff_filter(test_path=None):
     # General configuration #
     state_dim = 4
     env_size = 200
@@ -59,14 +59,6 @@ def run_diff_filter():
 
     # beacons config -> TODO #
     num_beacons = 2
-
-    test_env = SimulationEnv(
-        size=env_size,
-        num_discs=num_discs,
-        num_beacons=num_beacons,
-        mode=mode,
-        auto=False,
-    )
 
     dynamics_model = MotionModel(
         state_dimension=state_dim,
@@ -80,30 +72,41 @@ def run_diff_filter():
         num_beacons=num_beacons,
     )
 
-    beacon_positions = np.tile(test_env.get_beacons_pos().astype(np.float32), (8, 1, 1))
-
     # Hyperparameters for differential filter #
     hparams = {
         "num_particles": num_particles,
         "state_dimension": state_dim,
         "env_size": env_size,
         "soft_resample_alpha": 0.7,
-        "batch_size": 8,
+        "batch_size": 1,
     }
 
-    diff_particle_filter = DiffParticleFilter(
+    pf_model = DiffParticleFilter(
         hparams=hparams,
         motion_model=dynamics_model,
         observation_model=observation_model,
     )
-    measurement, state = test_env.run_batch(hparams["batch_size"])
-    # TODO: where are we supposed to get measurement from?
-    # Num of measurements = Batch size
-    # in test does it make sense to have batch number > 1
-    es = diff_particle_filter(torch.from_numpy(measurement), torch.from_numpy(beacon_positions))
+    path = "saved_models/saved_model.pth"
+    pf_model.load_state_dict(torch.load(path))
+    pf_model.init_beliefs()
+    pf_model.eval()
 
-    loss = F.mse_loss(es, torch.from_numpy(state.reshape(8, -1)))
-    loss.backward()
+    if not test_path:
+        test_env = SimulationEnv(
+            size=env_size,
+            num_discs=num_discs,
+            num_beacons=num_beacons,
+            mode=mode,
+            auto=True,
+            animate=True,
+            dp_filter=pf_model,
+        )
+
+        print(test_env.get_error())
+
+    else:
+        set = DatasetSeq()
+        set.load_dataset(test_path)
 
 
 def create_dataset():

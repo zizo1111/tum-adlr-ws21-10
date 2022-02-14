@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from pf.simulation.animation import Animator
 import math
 
@@ -13,6 +14,7 @@ class SimulationEnv:
         auto=False,
         animate=False,
         p_filter=None,
+        dp_filter=None,
         dt=1,
     ):
         """
@@ -45,6 +47,10 @@ class SimulationEnv:
             # Error propagation
             self.timesteps = 0
             self.mse = 0
+
+        self.dpf_ = None
+        if dp_filter:
+            self.dpf_ = dp_filter
 
         # auto process steps
         self.auto_ = auto
@@ -150,6 +156,14 @@ class SimulationEnv:
             self.estimate_ = self.filter_.get_estimate()
             self._compute_error()
 
+        elif self.dpf_:
+            estimate, weights, particles = self.dpf_(
+                torch.from_numpy(np.array([self.get_distance(-1)]).astype(np.float32)),
+                torch.from_numpy(np.array(self.beacons_).astype(np.float32)),
+            )
+            self.estimate_ = estimate.cpu().detach().numpy()
+            self.weights_ = weights.cpu().detach().numpy()
+            self.particles_ = particles.cpu().detach().numpy()
         if self.animate_ and not self.auto_:
             return self.animator_.set_data(
                 self.discs_,
