@@ -1,6 +1,7 @@
 import torch
 import torch.distributions as D
 import torch.nn as nn
+import matplotlib.pyplot as plt
 
 
 def initialize_weight(module):
@@ -40,20 +41,36 @@ class DiffParticleFilter(nn.Module):
         N = self.hparams["batch_size"]
         M = self.hparams["num_particles"]
         state_dim = self.hparams["state_dimension"]
+        env_size = self.hparams["env_size"]
 
         # Sample particles as GMM
-        mix = D.Categorical(
-            torch.ones(
-                M,
-            )
-        )
+        mix = D.Categorical(torch.ones(M,))
         comp = D.Independent(
-            D.Normal(torch.randn(M, state_dim), torch.rand(M, state_dim)), 1
+            D.Normal(
+                torch.hstack(
+                    (torch.rand(M, 2) * env_size, torch.randn(M, state_dim - 2) * 3)
+                ),
+                torch.rand(M, state_dim),
+            ),
+            1,
         )
         gmm = D.MixtureSameFamily(mix, comp)
 
         self.particle_states = gmm.sample((N, M))
         assert self.particle_states.shape == (N, M, state_dim)
+
+        # Visualize for debugging purposes:
+        '''plt.scatter(x=self.particle_states[0, :, 0], y=self.particle_states[0, :, 1])
+        plt.quiver(
+            self.particle_states[0, :, 0],
+            self.particle_states[0, :, 1],
+            self.particle_states[0, :, 2] / torch.max(self.particle_states[0, :, 2]),
+            self.particle_states[0, :, 3] / torch.max(self.particle_states[0, :, 3]),
+            color="g",
+            units="xy",
+            scale=0.1,
+        )
+        plt.show()'''
 
         # Normalize weights
         self.weights = self.particle_states.new_full((N, M), 1.0 / M)
@@ -71,9 +88,7 @@ class DiffParticleFilter(nn.Module):
 
         # Apply observation model to get the likelihood for each particle
         input_obs = self.observation_model.prepare_input(
-            self.particle_states,
-            beacon_positions,
-            measurement,
+            self.particle_states, beacon_positions, measurement,
         )
         observation_lik = self.observation_model(input_obs)
         assert observation_lik.shape == (N, M)
