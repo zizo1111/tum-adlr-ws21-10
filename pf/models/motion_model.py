@@ -6,6 +6,10 @@ import torch.nn.functional as F
 
 
 class BN(nn.Module):
+    """
+    BatchNorm1d is applied on the second input dimension for (N,C,L)
+    -> we need it on the L here (?) -> some permutation of the input has to be done
+    """
     def __init__(self, state_dimension: int):
         super().__init__()
         self.model = nn.Sequential(nn.BatchNorm1d(state_dimension))
@@ -14,6 +18,22 @@ class BN(nn.Module):
         prem = torch.permute(input, (0, 2, 1))
         output = self.model(prem)
         return torch.permute(output, (0, 2, 1))
+
+
+class PositiveTanh(nn.Module):
+    """
+    The characteristic of Tanh() is that its output is in interval [-1, 1] / [0, 2] for PositiveTanh(),
+    which might be an issue for our setup.
+    However, it can be helpful in temporal (i.e., recurrent and non-iid) settings.
+    """
+    def __init__(self):
+        super().__init__()
+        self.model = nn.Tanh()
+
+    def forward(self, input: torch.Tensor):
+        x = self.model(input)
+        ones = torch.ones(size=x.shape)
+        return x + ones
 
 
 class MotionModel(nn.Module):
@@ -30,22 +50,21 @@ class MotionModel(nn.Module):
         # -> shared weights for each particle
         self.model = nn.Sequential(
             nn.Linear(state_dimension, 2 * state_dimension),
-            BN(2 * state_dimension),
-            # TODO: BatchNorm is applied on the second input dimension for (N,C,L);
-            # we need it on the L here (?) -> some permutation of the input has to be done
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(2 * state_dimension, state_dimension * state_dimension),
-            BN(state_dimension * state_dimension),  # TODO: same here
-            nn.ReLU(),
+            nn.Tanh(),
             # mean + lower triangular L for covariance matrix
             # S = L * L.T, with L having positive-valued diagonal entries
             nn.Linear(
                 state_dimension * state_dimension,
                 state_dimension * (state_dimension + 3) // 2,
             ),
-            BN(
-                state_dimension * (state_dimension + 3) // 2
-            ),  # TODO: same for BatchNorm here
+            nn.Tanh(),
+            nn.Linear(
+                state_dimension * (state_dimension + 3) // 2,
+                state_dimension * (state_dimension + 1),
+            ),
+            PositiveTanh(),
         )
 
     def standard_forward(
@@ -110,46 +129,65 @@ class MotionModel(nn.Module):
 
         x = self.model(particle_states)
 
-        # Split to get the mean and covariance matrix separately
-        predicted_mean, log_predicted_scale_diag, predicted_scale_lower = torch.split(
-            x,
-            [
-                self.state_dimension,
-                self.state_dimension,
+        if x.shape == (N, M, self.state_dimension * (self.state_dimension + 3) // 2):
+            # Split to get the mean and covariance matrix separately
+            predicted_mean, log_predicted_scale_diag, predicted_scale_lower = torch.split(
+                x,
+                [
+                    self.state_dimension,
+                    self.state_dimension,
+                    self.state_dimension * (self.state_dimension - 1) // 2,
+                    ],
+                dim=2,
+            )
+            assert predicted_mean.shape == (N, M, self.state_dimension)
+            assert log_predicted_scale_diag.shape == (N, M, self.state_dimension)
+            assert predicted_scale_lower.shape == (
+                N,
+                M,
                 self.state_dimension * (self.state_dimension - 1) // 2,
-            ],
-            dim=2,
-        )
-        assert predicted_mean.shape == (N, M, self.state_dimension)
-        assert log_predicted_scale_diag.shape == (N, M, self.state_dimension)
-        assert predicted_scale_lower.shape == (
-            N,
-            M,
-            self.state_dimension * (self.state_dimension - 1) // 2,
-        )
+            )
 
-        # Assume our network outputs log(value) -> this way we always get positive values on the diagonal
-        predicted_scale_tril = torch.diag_embed(torch.exp(log_predicted_scale_diag)).to(
-            self.device
-        )
+            # Assume our network outputs log(value) -> this way we always get positive values on the diagonal
+            predicted_scale_tril = torch.diag_embed(torch.exp(log_predicted_scale_diag)).to(
+                self.device
+            )
 
-        # Reform to get the lower part (under main diagonal) of the scale
-        lower_tril_indices = torch.tril_indices(
-            row=self.state_dimension,
-            col=self.state_dimension,
-            offset=-1,
-            device=self.device,
-        )
-        predicted_scale_tril[
-            :, :, lower_tril_indices[0], lower_tril_indices[1]
-        ] = predicted_scale_lower
+            # Reform to get the lower part (under main diagonal) of the scale
+            lower_tril_indices = torch.tril_indices(
+                row=self.state_dimension,
+                col=self.state_dimension,
+                offset=-1,
+                device=self.device,
+            )
+            predicted_scale_tril[
+                :, :, lower_tril_indices[0], lower_tril_indices[1]
+            ] = predicted_scale_lower
+        elif x.shape == (N, M, self.state_dimension * (self.state_dimension + 1)):
+            # Split to get the mean and covariance matrix separately
+            predicted_mean, predicted_scale_lower = torch.split(
+                x,
+                [
+                    self.state_dimension,
+                    self.state_dimension * self.state_dimension,
+                ],
+                dim=2,
+            )
+            assert predicted_mean.shape == (N, M, self.state_dimension)
+            assert predicted_scale_lower.shape == (
+                N,
+                M,
+                self.state_dimension * self.state_dimension,
+            )
+
+            predicted_scale_tril = predicted_scale_lower.view(N, M, self.state_dimension, self.state_dimension).tril().to(self.device)
 
         # Apply threshold to get only positive values on the diagonal -> to satisfy the constraint LowerCholesky()
-        ## F.threshold(torch.diagonal(predicted_tril, offset=0, dim1=2, dim2=3), threshold=0, value=1.e-5, inplace=True)
+        ## F.threshold(torch.diagonal(predicted_scale_tril, offset=0, dim1=2, dim2=3), threshold=0, value=1.e-5, inplace=True)
         # ^was resulting in RuntimeError
 
         # Or just make values on the diagonal absolute
-        ## predicted_tril_cholesky = predicted_tril
+        ## predicted_tril_cholesky = predicted_scale_tril
         ## predicted_tril_cholesky.diagonal(dim1=2, dim2=3).abs_()
         # ^apparently, this also did not work out well
         assert predicted_scale_tril.shape == (
@@ -166,3 +204,13 @@ class MotionModel(nn.Module):
         ).rsample()
 
         return predicted_particle_states
+
+
+def cholesky_check(value):
+    """
+    Original LowerCholesky() constraint check from PyTorch
+    """
+    value_tril = value.tril()
+    lower_triangular = (value_tril == value).view(value.shape[:-2] + (-1,)).min(-1)[0]
+    positive_diagonal = (value.diagonal(dim1=-2, dim2=-1) > 0).min(-1)[0]
+    return lower_triangular & positive_diagonal
