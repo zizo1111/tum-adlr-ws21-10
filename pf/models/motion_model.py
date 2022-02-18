@@ -10,6 +10,7 @@ class BN(nn.Module):
     BatchNorm1d is applied on the second input dimension for (N,C,L)
     -> we need it on the L here (?) -> some permutation of the input has to be done
     """
+
     def __init__(self, state_dimension: int):
         super().__init__()
         self.model = nn.Sequential(nn.BatchNorm1d(state_dimension))
@@ -26,6 +27,7 @@ class PositiveTanh(nn.Module):
     which might be an issue for our setup.
     However, it can be helpful in temporal (i.e., recurrent and non-iid) settings.
     """
+
     def __init__(self):
         super().__init__()
         self.model = nn.Tanh()
@@ -50,21 +52,21 @@ class MotionModel(nn.Module):
         # -> shared weights for each particle
         self.model = nn.Sequential(
             nn.Linear(state_dimension, 2 * state_dimension),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.Linear(2 * state_dimension, state_dimension * state_dimension),
-            nn.Tanh(),
+            nn.ReLU(),
             # mean + lower triangular L for covariance matrix
             # S = L * L.T, with L having positive-valued diagonal entries
             nn.Linear(
                 state_dimension * state_dimension,
                 state_dimension * (state_dimension + 3) // 2,
             ),
-            nn.Tanh(),
-            nn.Linear(
-                state_dimension * (state_dimension + 3) // 2,
-                state_dimension * (state_dimension + 1),
-            ),
-            PositiveTanh(),
+            #nn.Tanh(),
+            #nn.Linear(
+            #   state_dimension * (state_dimension + 3) // 2,
+            #   state_dimension * (state_dimension + 1),
+            #),
+            #PositiveTanh(),  # TODO: think of possible use
         )
 
     def standard_forward(
@@ -131,14 +133,27 @@ class MotionModel(nn.Module):
 
         if x.shape == (N, M, self.state_dimension * (self.state_dimension + 3) // 2):
             # Split to get the mean and covariance matrix separately
-            predicted_mean, log_predicted_scale_diag, predicted_scale_lower = torch.split(
+            (
+                predicted_mean_pos,
+                predicted_mean_vel,
+                log_predicted_scale_diag,
+                predicted_scale_lower,
+            ) = torch.split(
                 x,
                 [
-                    self.state_dimension,
+                    2,
+                    self.state_dimension - 2,
                     self.state_dimension,
                     self.state_dimension * (self.state_dimension - 1) // 2,
-                    ],
+                ],
                 dim=2,
+            )
+            predicted_mean = torch.cat(
+                (torch.clamp(predicted_mean_pos, min=0, max=self.env_size), predicted_mean_vel),
+                dim=-1,
+            )  # TODO: clamp also velocities?
+            log_predicted_scale_diag = torch.clamp(
+                log_predicted_scale_diag, min=-2, max=1
             )
             assert predicted_mean.shape == (N, M, self.state_dimension)
             assert log_predicted_scale_diag.shape == (N, M, self.state_dimension)
@@ -149,9 +164,9 @@ class MotionModel(nn.Module):
             )
 
             # Assume our network outputs log(value) -> this way we always get positive values on the diagonal
-            predicted_scale_tril = torch.diag_embed(torch.exp(log_predicted_scale_diag)).to(
-                self.device
-            )
+            predicted_scale_tril = torch.diag_embed(
+                torch.exp(log_predicted_scale_diag)
+            ).to(self.device)
 
             # Reform to get the lower part (under main diagonal) of the scale
             lower_tril_indices = torch.tril_indices(
@@ -165,22 +180,23 @@ class MotionModel(nn.Module):
             ] = predicted_scale_lower
         elif x.shape == (N, M, self.state_dimension * (self.state_dimension + 1)):
             # Split to get the mean and covariance matrix separately
-            predicted_mean, predicted_scale_lower = torch.split(
+            predicted_mean, predicted_scale = torch.split(
                 x,
-                [
-                    self.state_dimension,
-                    self.state_dimension * self.state_dimension,
-                ],
+                [self.state_dimension, self.state_dimension * self.state_dimension],
                 dim=2,
             )
             assert predicted_mean.shape == (N, M, self.state_dimension)
-            assert predicted_scale_lower.shape == (
+            assert predicted_scale.shape == (
                 N,
                 M,
                 self.state_dimension * self.state_dimension,
             )
 
-            predicted_scale_tril = predicted_scale_lower.view(N, M, self.state_dimension, self.state_dimension).tril().to(self.device)
+            predicted_scale_tril = (
+                predicted_scale.view(N, M, self.state_dimension, self.state_dimension)
+                .tril()
+                .to(self.device)
+            )
 
         # Apply threshold to get only positive values on the diagonal -> to satisfy the constraint LowerCholesky()
         ## F.threshold(torch.diagonal(predicted_scale_tril, offset=0, dim1=2, dim2=3), threshold=0, value=1.e-5, inplace=True)
@@ -199,9 +215,13 @@ class MotionModel(nn.Module):
 
         # Sample (with gradient) from the resulting distribution -> "reparameterization trick"
         predicted_particle_states = D.MultivariateNormal(
-            loc=predicted_mean,
-            scale_tril=predicted_scale_tril,
+            loc=predicted_mean, scale_tril=predicted_scale_tril,
         ).rsample()
+
+        # predicted_particle_states[:, :, 0:2] = predicted_particle_states[:, :, 0:2] * 100  # TODO: also a possibility
+
+        torch.clamp_(predicted_particle_states[:, :, :2], min=0, max=self.env_size)
+        # torch.clamp_(predicted_particle_states[:, :, 3:], min=-5, max=5)
 
         return predicted_particle_states
 
