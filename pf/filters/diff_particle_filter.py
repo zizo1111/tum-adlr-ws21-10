@@ -16,7 +16,7 @@ class DiffParticleFilter(nn.Module):
         motion_model,
         observation_model,
         resample=True,
-        estimation_method="weighted_average",
+        estimation_method="max",
     ):
         super().__init__()
 
@@ -44,7 +44,11 @@ class DiffParticleFilter(nn.Module):
         env_size = self.hparams["env_size"]
 
         # Sample particles as GMM
-        mix = D.Categorical(torch.ones(M,))
+        mix = D.Categorical(
+            torch.ones(
+                M,
+            )
+        )
         comp = D.Independent(
             D.Normal(
                 torch.hstack(
@@ -60,7 +64,7 @@ class DiffParticleFilter(nn.Module):
         assert self.particle_states.shape == (N, M, state_dim)
 
         # Visualize for debugging purposes:
-        '''plt.scatter(x=self.particle_states[0, :, 0], y=self.particle_states[0, :, 1])
+        """plt.scatter(x=self.particle_states[0, :, 0], y=self.particle_states[0, :, 1])
         plt.quiver(
             self.particle_states[0, :, 0],
             self.particle_states[0, :, 1],
@@ -70,7 +74,7 @@ class DiffParticleFilter(nn.Module):
             units="xy",
             scale=0.1,
         )
-        plt.show()'''
+        plt.show()"""
 
         # Normalize weights
         self.weights = self.particle_states.new_full((N, M), 1.0 / M)
@@ -88,7 +92,9 @@ class DiffParticleFilter(nn.Module):
 
         # Apply observation model to get the likelihood for each particle
         input_obs = self.observation_model.prepare_input(
-            self.particle_states, beacon_positions, measurement,
+            self.particle_states,
+            beacon_positions,
+            measurement,
         )
         observation_lik = self.observation_model(input_obs)
         assert observation_lik.shape == (N, M)
@@ -112,6 +118,10 @@ class DiffParticleFilter(nn.Module):
                 self.weights.clone().unsqueeze(-1) * self.particle_states, dim=1
             )
         # TODO add other estimation methods e.g. max etc.
+        elif self.estimation_method == "max":
+            max = torch.argmax(self.weights, dim=1)
+            b = torch.arange(self.particle_states.shape[0]).type_as(max)
+            self.estimates = self.particle_states[b, max]
 
         assert self.estimates.shape == (N, state_dim)
 
