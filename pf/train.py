@@ -38,11 +38,10 @@ def train_epoch(
         N = state.shape[0]  # batch_size
         state_reshaped = state.reshape(N, -1)
 
-        # RMSE/MSE loss
-        loss += loss_fn(estimate, state_reshaped)
-
-        # NLL
-        # loss += loss_fn(estimate, state, weights, particles_states)
+        if loss_fn in [MSE, RMSE]:
+            loss += loss_fn(state_reshaped, estimate)
+        elif loss_fn in [NLL]:
+            loss += loss_fn(state, weights, particles_states, covariance=model.gmm.component_distribution.variance)
 
         running_loss += loss.item()
         if i % seq_len == seq_len - 1:
@@ -99,11 +98,10 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
         N = state.shape[0]  # batch_size
         state_reshaped = state.reshape(N, -1)
 
-        # RMSE/MSE loss
-        loss += loss_fn(estimate, state_reshaped)
-
-        # NLL
-        # loss += loss_fn(estimate, state, weights, particles_states)
+        if loss_fn in [MSE, RMSE]:
+            loss += loss_fn(state_reshaped, estimate)
+        elif loss_fn in [NLL]:
+            loss += loss_fn(state, weights, particles_states, covariance=model.gmm.component_distribution.variance)
 
         running_loss += loss.item()
         if i % seq_len == seq_len - 1:

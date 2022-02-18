@@ -58,9 +58,9 @@ class DiffParticleFilter(nn.Module):
             ),
             1,
         )
-        gmm = D.MixtureSameFamily(mix, comp)
+        self.gmm = D.MixtureSameFamily(mix, comp)
 
-        self.particle_states = gmm.sample((N, M))
+        self.particle_states = self.gmm.sample((N, M))
         assert self.particle_states.shape == (N, M, state_dim)
 
         # Visualize for debugging purposes:
