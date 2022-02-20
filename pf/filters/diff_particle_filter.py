@@ -16,7 +16,7 @@ class DiffParticleFilter(nn.Module):
         motion_model,
         observation_model,
         resample=True,
-        estimation_method="max",
+        estimation_method="weighted_average",
     ):
         super().__init__()
 
@@ -101,9 +101,9 @@ class DiffParticleFilter(nn.Module):
 
         # Update particle weights
         self.weights *= observation_lik
-        self.weights /= torch.sum(
-            self.weights, dim=1, keepdim=True
-        )  # TODO: change to `logsumexp` if log weights used
+        self.weights /= torch.sum(self.weights, dim=1, keepdim=True)
+
+        # TODO: change to `logsumexp` if log weights used
         assert self.weights.shape == (N, M)
         assert torch.allclose(
             torch.sum(self.weights, dim=1, keepdim=True), torch.ones(N)
@@ -140,6 +140,10 @@ class DiffParticleFilter(nn.Module):
             dim=0,
         )  # q(k)
         self.weights = self.weights / probs  # w'
+
+        # i dont think this is true, but the only way to get normalized weights
+        self.weights /= torch.sum(self.weights, dim=1, keepdim=True)
+
         assert probs.shape == (N, M)
 
         # Sampling from q(k) is left

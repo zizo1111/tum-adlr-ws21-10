@@ -41,7 +41,12 @@ def train_epoch(
         if loss_fn in [MSE, RMSE]:
             loss += loss_fn(state_reshaped, estimate)
         elif loss_fn in [NLL]:
-            loss += loss_fn(state, weights, particles_states, covariance=model.gmm.component_distribution.variance)
+            loss += loss_fn(
+                state,
+                weights,
+                particles_states,
+                covariance=model.gmm.component_distribution.variance,
+            )
 
         running_loss += loss.item()
         if i % seq_len == seq_len - 1:
@@ -57,12 +62,10 @@ def train_epoch(
             env = setting["env_size"].clone().detach().numpy()[0]
             beac_pos = setting["beacons_pos"].clone().detach().numpy()[0]
             st = state_reshaped.clone().detach().numpy()[0].reshape(1, 4)
+            particles_st = particles_states.clone().detach()[0]
             est = estimate.clone().detach().numpy()[0].reshape(1, 4)
             animator = Animator(env, beac_pos, show=False)
-            _ = animator.set_data(
-                st,
-                estimate=est,
-            )
+            _ = animator.set_data(st, estimate=est, particles=particles_st)
 
             writer.add_scalar(
                 "training loss", last_loss / seq_len, epoch * len(train_loader) + i
@@ -101,7 +104,12 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
         if loss_fn in [MSE, RMSE]:
             loss += loss_fn(state_reshaped, estimate)
         elif loss_fn in [NLL]:
-            loss += loss_fn(state, weights, particles_states, covariance=model.gmm.component_distribution.variance)
+            loss += loss_fn(
+                state,
+                weights,
+                particles_states,
+                covariance=model.gmm.component_distribution.variance,
+            )
 
         running_loss += loss.item()
         if i % seq_len == seq_len - 1:
