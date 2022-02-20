@@ -32,7 +32,9 @@ def train_epoch(
         setting = data["setting"]
 
         # Make predictions for this batch
-        estimate, weights, particles_states = model(measurement, setting["beacons_pos"])
+        estimate, weights, particles_states, precision_matrix = model(
+            measurement, setting["beacons_pos"]
+        )
 
         # Compute the loss and its gradients
         N = state.shape[0]  # batch_size
@@ -46,6 +48,7 @@ def train_epoch(
                 weights,
                 particles_states,
                 covariance=model.gmm.component_distribution.variance,
+                precision_matrix=precision_matrix,
             )
 
         running_loss += loss.item()
@@ -95,7 +98,9 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
         setting = data["setting"]
 
         # Make predictions for this batch
-        estimate, weights, particles_states = model(measurement, setting["beacons_pos"])
+        estimate, weights, particles_states, precision_matrix = model(
+            measurement, setting["beacons_pos"]
+        )
 
         # Compute the loss and its gradients
         N = state.shape[0]  # batch_size
@@ -109,6 +114,7 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
                 weights,
                 particles_states,
                 covariance=model.gmm.component_distribution.variance,
+                precision_matrix=precision_matrix,
             )
 
         running_loss += loss.item()

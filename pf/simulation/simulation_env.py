@@ -192,7 +192,7 @@ class SimulationEnv:
             self._compute_error()
 
         elif self.dpf_:
-            estimate, weights, particles = self.dpf_(
+            estimate, weights, particles, _ = self.dpf_(
                 torch.from_numpy(np.array([self.get_distance(-1)]).astype(np.float32)),
                 torch.from_numpy(np.array(self.beacons_).astype(np.float32)),
             )

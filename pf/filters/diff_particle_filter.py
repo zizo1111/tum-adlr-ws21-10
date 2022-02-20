@@ -87,7 +87,7 @@ class DiffParticleFilter(nn.Module):
         soft_resample_alpha = self.hparams["soft_resample_alpha"]
 
         # Apply motion model to predict next particle states
-        self.particle_states = self.motion_model.forward(self.particle_states)
+        self.particle_states, precision_matrix = self.motion_model.forward(self.particle_states)
         assert self.particle_states.shape == (N, M, state_dim)
 
         # Apply observation model to get the likelihood for each particle
@@ -124,7 +124,7 @@ class DiffParticleFilter(nn.Module):
 
         assert self.estimates.shape == (N, state_dim)
 
-        return self.estimates, self.weights, self.particle_states
+        return self.estimates, self.weights, self.particle_states, precision_matrix
 
     def _soft_resample(self, alpha):
         """

@@ -214,16 +214,17 @@ class MotionModel(nn.Module):
         )
 
         # Sample (with gradient) from the resulting distribution -> "reparameterization trick"
-        predicted_particle_states = D.MultivariateNormal(
+        reparam = D.MultivariateNormal(
             loc=predicted_mean, scale_tril=predicted_scale_tril,
-        ).rsample()
+        )
+        predicted_particle_states = reparam.rsample()
 
         # predicted_particle_states[:, :, 0:2] = predicted_particle_states[:, :, 0:2] * 100  # TODO: also a possibility
 
         torch.clamp_(predicted_particle_states[:, :, :2], min=0, max=self.env_size)
         # torch.clamp_(predicted_particle_states[:, :, 3:], min=-5, max=5)
 
-        return predicted_particle_states
+        return predicted_particle_states, reparam.precision_matrix
 
 
 def cholesky_check(value):

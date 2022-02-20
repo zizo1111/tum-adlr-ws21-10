@@ -32,7 +32,7 @@ def RMSE(gt, estimate):
 
 # TODO nll
 # https://github.com/akloss/differentiable_filters/blob/821889dec411927658c6ef7dd01c9028d2f28efd/differentiable_filters/contexts/base_context.py#L341
-def NLL(gt, weights, particle_states, covariance=None, reduce_mean=True):
+def NLL(gt, weights, particle_states, covariance=None, precision_matrix=None, reduce_mean=True):
     N = particle_states.shape[0]  # batch size
     M = particle_states.shape[1]  # number of particles
     state_dim = particle_states.shape[-1]
@@ -47,6 +47,8 @@ def NLL(gt, weights, particle_states, covariance=None, reduce_mean=True):
     weights /= torch.sum(weights, dim=-1, keepdims=True)
     assert weights.shape == (N, M)
 
+    if precision_matrix is not None:  # prefer precision matrix over covariance
+        precision_matrix = precision_matrix.view([1, N, M, state_dim, state_dim])
     covariance = torch.diag_embed(covariance)
 
     if diff.ndim > 3:
@@ -58,14 +60,24 @@ def NLL(gt, weights, particle_states, covariance=None, reduce_mean=True):
         diff = torch.reshape(diff, [N, M, state_dim, 1])
         covariance = torch.tile(covariance[None, None, :, :], [N, 1, 1, 1])
 
-    exponent = torch.matmul(
-        torch.matmul(torch.transpose(diff, -2, -1), torch.inverse(covariance)), diff
-    )
+    if precision_matrix is not None:  # prefer precision matrix over covariance
+        exponent = torch.matmul(
+            torch.matmul(torch.transpose(diff, -2, -1), precision_matrix), diff
+        )
+    else:
+        exponent = torch.matmul(
+            torch.matmul(torch.transpose(diff, -2, -1), torch.inverse(covariance)), diff
+        )
     exponent = torch.reshape(exponent, [N, sl, M])
 
-    normalizer = torch.log(torch.det(covariance)) + (
-        state_dim * torch.log(2 * torch.tensor(math.pi))
-    )
+    if precision_matrix is not None:  # prefer precision matrix over covariance
+        normalizer = torch.log(torch.det(torch.inverse(precision_matrix))) + (
+            state_dim * torch.log(2 * torch.tensor(math.pi))
+        )
+    else:
+        normalizer = torch.log(torch.det(covariance)) + (
+            state_dim * torch.log(2 * torch.tensor(math.pi))
+        )
     normalizer = torch.reshape(normalizer, [N, sl, M])
 
     log_like = -0.5 * (exponent + normalizer)
