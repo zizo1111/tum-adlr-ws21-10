@@ -112,16 +112,15 @@ class DiffParticleFilter(nn.Module):
         if self.resample:
             self._soft_resample(soft_resample_alpha)
 
-        # compute output
+        # compute estimate
         if self.estimation_method == "weighted_average":
             self.estimates = torch.sum(
                 self.weights.clone().unsqueeze(-1) * self.particle_states, dim=1
-            )
-        # TODO add other estimation methods e.g. max etc.
+            ) / M
         elif self.estimation_method == "max":
-            max = torch.argmax(self.weights, dim=1)
-            b = torch.arange(self.particle_states.shape[0]).type_as(max)
-            self.estimates = self.particle_states[b, max]
+            max_weight = torch.argmax(self.weights, dim=1)
+            b = torch.arange(self.particle_states.shape[0]).type_as(max_weight)
+            self.estimates = self.particle_states[b, max_weight]
 
         assert self.estimates.shape == (N, state_dim)
 
@@ -139,10 +138,10 @@ class DiffParticleFilter(nn.Module):
             torch.stack([alpha * self.weights, (1 - alpha) * uniform_weights], dim=0),
             dim=0,
         )  # q(k)
-        self.weights = self.weights / probs  # w'
+        self.weights = self.weights / probs  # w' -> stays un-normalized
 
-        # i dont think this is true, but the only way to get normalized weights
-        self.weights /= torch.sum(self.weights, dim=1, keepdim=True)
+        # TODO: i dont think this is true, but the only way to get normalized weights
+        # self.weights /= torch.sum(self.weights, dim=1, keepdim=True)
 
         assert probs.shape == (N, M)
 
@@ -157,5 +156,10 @@ class DiffParticleFilter(nn.Module):
             index=indices[:, :, None].expand(
                 (-1, -1, state_dim)
             ),  # only expand the size of 3rd dimension
+        )
+        self.weights = torch.gather(
+            self.weights,
+            dim=1,
+            index=indices[:, :]
         )
         assert self.particle_states.shape == (N, M, state_dim)
