@@ -1,6 +1,8 @@
 import numpy as np
+import torch
 from pf.simulation.animation import Animator
 import math
+from itertools import combinations
 
 
 class SimulationEnv:
@@ -10,9 +12,11 @@ class SimulationEnv:
         num_discs,
         num_beacons,
         mode="def",
+        collide_discs=True,
         auto=False,
         animate=False,
         p_filter=None,
+        dp_filter=None,
         dt=1,
     ):
         """
@@ -37,6 +41,7 @@ class SimulationEnv:
         self.filter_ = None
         self.particles_ = None
         self.estimate_ = None
+        self.collide_discs = collide_discs
         if p_filter:
             self.filter_ = p_filter
             self.particles_ = p_filter.get_particles()
@@ -45,6 +50,10 @@ class SimulationEnv:
             # Error propagation
             self.timesteps = 0
             self.mse = 0
+
+        self.dpf_ = None
+        if dp_filter:
+            self.dpf_ = dp_filter
 
         # auto process steps
         self.auto_ = auto
@@ -135,7 +144,39 @@ class SimulationEnv:
             new_state[out_left, 1] = self.env_size_ - new_state[:, 1]
             new_state[out_right, 1] = new_state[:, 1] - self.env_size_
 
+        if self.collide_discs and self.num_discs_ > 1:
+            pairs = combinations(range(self.num_discs_), 2)
+            for i, j in pairs:
+                if self.ball_collision(new_state[i], new_state[j]):
+                    print("collision")
+
         return new_state
+
+    def ball_collision(self, d1, d2):
+        """find out if d1 collided with d2"""
+
+        radius = 2
+
+        # calculate distances
+        dx = abs(d1[0] - d2[0])
+        dy = abs(d1[1] - d2[1])
+        radius_distance = math.sqrt((dx * dx) + (dy * dy))
+
+        # Check to see if the 2 discs are close enough to be in contact
+        if radius_distance <= (2 * radius):
+
+            m1, m2 = radius ** 2, radius ** 2
+            M = m1 + m2
+            r1, r2 = d1[:2], d2[:2]
+            d = np.linalg.norm(r1 - r2) ** 2
+            v1, v2 = d1[2:], d2[2:]
+            u1 = v1 - 2 * m2 / M * np.dot(v1 - v2, r1 - r2) / d * (r1 - r2)
+            u2 = v2 - 2 * m1 / M * np.dot(v2 - v1, r2 - r1) / d * (r2 - r1)
+            d1[2:] = u1
+            d2[2:] = u2
+            return True
+
+        return False
 
     def update_step(self, dt=1):
         """
@@ -150,6 +191,14 @@ class SimulationEnv:
             self.estimate_ = self.filter_.get_estimate()
             self._compute_error()
 
+        elif self.dpf_:
+            estimate, weights, particles, _ = self.dpf_(
+                torch.from_numpy(np.array([self.get_distance(-1)]).astype(np.float32)),
+                torch.from_numpy(np.array(self.beacons_).astype(np.float32)),
+            )
+            self.estimate_ = estimate.cpu().detach().numpy()
+            self.weights_ = weights.cpu().detach().numpy()
+            self.particles_ = particles.cpu().detach().numpy()
         if self.animate_ and not self.auto_:
             return self.animator_.set_data(
                 self.discs_,

@@ -4,35 +4,35 @@ import torch
 import torch.nn as nn
 
 
-def MSE(estimate, gt):
+def MSE(gt, estimate):
     """
     Computes Mean Squared Error (MSE) loss.
 
-    :param estimate: Current state estimate, returned by the diff. PF model
     :param gt: Ground truth state of the disc
+    :param estimate: Current state estimate, returned by the diff. PF model
     :return: MSE loss
     """
     fn = nn.MSELoss(reduction="mean")
-    return fn(estimate, gt)
+    return fn(gt, estimate)
 
 
-def RMSE(estimate, gt):
+def RMSE(gt, estimate):
     """
     Returns Root Mean Square Error (RMSE) loss.
     Note: This is not comparable to the standard PF error! There, we compute:
         * RMSE only for the disc position (effectively first two state dimensions)
         * Mean over the previous timesteps
 
-    :param estimate: Current state estimate, returned by the diff. PF model
     :param gt: Ground truth state of the disc
+    :param estimate: Current state estimate, returned by the diff. PF model
     :return: RMSE loss
     """
-    return torch.sqrt(torch.mean((estimate - gt) ** 2))
+    return torch.sqrt(torch.mean((gt - estimate) ** 2))
 
 
 # TODO nll
 # https://github.com/akloss/differentiable_filters/blob/821889dec411927658c6ef7dd01c9028d2f28efd/differentiable_filters/contexts/base_context.py#L341
-def NLL(estimate, gt, weights, particle_states, reduce_mean=True):
+def NLL(gt, weights, particle_states, covariance=None, precision_matrix=None, reduce_mean=True):
     N = particle_states.shape[0]  # batch size
     M = particle_states.shape[1]  # number of particles
     state_dim = particle_states.shape[-1]
@@ -47,32 +47,37 @@ def NLL(estimate, gt, weights, particle_states, reduce_mean=True):
     weights /= torch.sum(weights, dim=-1, keepdims=True)
     assert weights.shape == (N, M)
 
-    # #Not sure about this please re-check
-    mixture_std = 1
-
-    covar = torch.ones(state_dim)
-    for k in range(state_dim):
-        covar[k] *= mixture_std
-
-    covar = torch.diag(torch.square(covar))
+    if precision_matrix is not None:  # prefer precision matrix over covariance
+        precision_matrix = precision_matrix.view([1, N, M, state_dim, state_dim])
+    covariance = torch.diag_embed(covariance)
 
     if diff.ndim > 3:
         sl = diff.shape[1]
         diff = torch.reshape(diff, [N, -1, M, state_dim, 1])
-        covar = torch.tile(covar[None, None, None, :, :], [N, sl, M, 1, 1])
+        covariance = torch.tile(covariance[None, None, None, :, :], [N, sl, M, 1, 1])
     else:
         sl = 1
         diff = torch.reshape(diff, [N, M, state_dim, 1])
-        covar = torch.tile(covar[None, None, :, :], [N, M, 1, 1])
+        covariance = torch.tile(covariance[None, None, :, :], [N, 1, 1, 1])
 
-    exponent = torch.matmul(
-        torch.matmul(torch.transpose(diff, -2, -1), torch.inverse(covar)), diff
-    )
+    if precision_matrix is not None:  # prefer precision matrix over covariance
+        exponent = torch.matmul(
+            torch.matmul(torch.transpose(diff, -2, -1), precision_matrix), diff
+        )
+    else:
+        exponent = torch.matmul(
+            torch.matmul(torch.transpose(diff, -2, -1), torch.inverse(covariance)), diff
+        )
     exponent = torch.reshape(exponent, [N, sl, M])
 
-    normalizer = torch.log(torch.det(covar)) + (
-        state_dim * torch.log(2 * torch.tensor(math.pi))
-    )
+    if precision_matrix is not None:  # prefer precision matrix over covariance
+        normalizer = torch.log(torch.det(torch.inverse(precision_matrix))) + (
+            state_dim * torch.log(2 * torch.tensor(math.pi))
+        )
+    else:
+        normalizer = torch.log(torch.det(covariance)) + (
+            state_dim * torch.log(2 * torch.tensor(math.pi))
+        )
     normalizer = torch.reshape(normalizer, [N, sl, M])
 
     log_like = -0.5 * (exponent + normalizer)

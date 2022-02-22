@@ -1,6 +1,7 @@
 import torch
 import torch.distributions as D
 import torch.nn as nn
+import matplotlib.pyplot as plt
 
 
 def initialize_weight(module):
@@ -40,6 +41,7 @@ class DiffParticleFilter(nn.Module):
         N = self.hparams["batch_size"]
         M = self.hparams["num_particles"]
         state_dim = self.hparams["state_dimension"]
+        env_size = self.hparams["env_size"]
 
         # Sample particles as GMM
         mix = D.Categorical(
@@ -48,12 +50,31 @@ class DiffParticleFilter(nn.Module):
             )
         )
         comp = D.Independent(
-            D.Normal(torch.randn(M, state_dim), torch.rand(M, state_dim)), 1
+            D.Normal(
+                torch.hstack(
+                    (torch.rand(M, 2) * env_size, torch.randn(M, state_dim - 2) * 3)
+                ),
+                torch.rand(M, state_dim),
+            ),
+            1,
         )
-        gmm = D.MixtureSameFamily(mix, comp)
+        self.gmm = D.MixtureSameFamily(mix, comp)
 
-        self.particle_states = gmm.sample((N, M))
+        self.particle_states = self.gmm.sample((N, M))
         assert self.particle_states.shape == (N, M, state_dim)
+
+        # Visualize for debugging purposes:
+        """plt.scatter(x=self.particle_states[0, :, 0], y=self.particle_states[0, :, 1])
+        plt.quiver(
+            self.particle_states[0, :, 0],
+            self.particle_states[0, :, 1],
+            self.particle_states[0, :, 2] / torch.max(self.particle_states[0, :, 2]),
+            self.particle_states[0, :, 3] / torch.max(self.particle_states[0, :, 3]),
+            color="g",
+            units="xy",
+            scale=0.1,
+        )
+        plt.show()"""
 
         # Normalize weights
         self.weights = self.particle_states.new_full((N, M), 1.0 / M)
@@ -66,7 +87,7 @@ class DiffParticleFilter(nn.Module):
         soft_resample_alpha = self.hparams["soft_resample_alpha"]
 
         # Apply motion model to predict next particle states
-        self.particle_states = self.motion_model.forward(self.particle_states)
+        self.particle_states, precision_matrix = self.motion_model.forward(self.particle_states)
         assert self.particle_states.shape == (N, M, state_dim)
 
         # Apply observation model to get the likelihood for each particle
@@ -80,9 +101,9 @@ class DiffParticleFilter(nn.Module):
 
         # Update particle weights
         self.weights *= observation_lik
-        self.weights /= torch.sum(
-            self.weights, dim=1, keepdim=True
-        )  # TODO: change to `logsumexp` if log weights used
+        self.weights /= torch.sum(self.weights, dim=1, keepdim=True)
+
+        # TODO: change to `logsumexp` if log weights used
         assert self.weights.shape == (N, M)
         assert torch.allclose(
             torch.sum(self.weights, dim=1, keepdim=True), torch.ones(N)
@@ -91,16 +112,19 @@ class DiffParticleFilter(nn.Module):
         if self.resample:
             self._soft_resample(soft_resample_alpha)
 
-        # compute output
+        # compute estimate
         if self.estimation_method == "weighted_average":
             self.estimates = torch.sum(
                 self.weights.clone().unsqueeze(-1) * self.particle_states, dim=1
-            )
-        # TODO add other estimation methods e.g. max etc.
+            ) / M
+        elif self.estimation_method == "max":
+            max_weight = torch.argmax(self.weights, dim=1)
+            b = torch.arange(self.particle_states.shape[0]).type_as(max_weight)
+            self.estimates = self.particle_states[b, max_weight]
 
         assert self.estimates.shape == (N, state_dim)
 
-        return self.estimates, self.weights, self.particle_states
+        return self.estimates, self.weights, self.particle_states, precision_matrix
 
     def _soft_resample(self, alpha):
         """
@@ -114,7 +138,11 @@ class DiffParticleFilter(nn.Module):
             torch.stack([alpha * self.weights, (1 - alpha) * uniform_weights], dim=0),
             dim=0,
         )  # q(k)
-        self.weights = self.weights / probs  # w'
+        self.weights = self.weights / probs  # w' -> stays un-normalized
+
+        # TODO: i dont think this is true, but the only way to get normalized weights
+        # self.weights /= torch.sum(self.weights, dim=1, keepdim=True)
+
         assert probs.shape == (N, M)
 
         # Sampling from q(k) is left
@@ -128,5 +156,10 @@ class DiffParticleFilter(nn.Module):
             index=indices[:, :, None].expand(
                 (-1, -1, state_dim)
             ),  # only expand the size of 3rd dimension
+        )
+        self.weights = torch.gather(
+            self.weights,
+            dim=1,
+            index=indices[:, :]
         )
         assert self.particle_states.shape == (N, M, state_dim)
