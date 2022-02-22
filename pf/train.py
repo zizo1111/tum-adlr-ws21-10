@@ -67,6 +67,7 @@ def train_epoch(
             st = state_reshaped.clone().detach().numpy()[0].reshape(1, 4)
             particles_st = particles_states.clone().detach()[0]
             est = estimate.clone().detach().numpy()[0].reshape(1, 4)
+            print("train:", est, st)
             animator = Animator(env, beac_pos, show=False)
             _ = animator.set_data(st, estimate=est, particles=particles_st)
 
@@ -128,12 +129,11 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
             env = setting["env_size"].clone().detach().numpy()[0]
             beac_pos = setting["beacons_pos"].clone().detach().numpy()[0]
             st = state_reshaped.clone().detach().numpy()[0].reshape(1, 4)
+            particles_st = particles_states.clone().detach()[0]
             est = estimate.clone().detach().numpy()[0].reshape(1, 4)
+            print("train:", est, st)
             animator = Animator(env, beac_pos, show=False)
-            _ = animator.set_data(
-                st,
-                estimate=est,
-            )
+            _ = animator.set_data(st, estimate=est, particles=particles_st)
 
             writer.add_scalar(
                 "val loss", last_loss / seq_len, epoch * len(val_loader) + i
@@ -153,7 +153,7 @@ def train(train_set, val_set=None, test_set=None):
     mode = "collide"
     num_discs = 1
     # PF config #
-    num_particles = 100
+    num_particles = 500
 
     # beacons config -> TODO #
     num_beacons = 2
@@ -207,7 +207,7 @@ def train(train_set, val_set=None, test_set=None):
     assert loss_fn in losses
 
     # TODO change optimizer
-    optimizer = torch.optim.Adam(pf_model.parameters(), lr=5.0e-3, weight_decay=1.0e-2)
+    optimizer = torch.optim.Adam(pf_model.parameters(), lr=1.0e-3)
 
     EPOCHS = 100
     print(pf_model)
