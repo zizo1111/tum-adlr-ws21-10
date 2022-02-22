@@ -61,12 +61,11 @@ class MotionModel(nn.Module):
                 state_dimension * state_dimension,
                 state_dimension * (state_dimension + 3) // 2,
             ),
-            #nn.Tanh(),
-            #nn.Linear(
+            # nn.Linear(
             #   state_dimension * (state_dimension + 3) // 2,
             #   state_dimension * (state_dimension + 1),
-            #),
-            #PositiveTanh(),  # TODO: think of possible use
+            # ),
+            # PositiveTanh(),  # TODO: think of possible use
         )
 
     def standard_forward(
@@ -149,7 +148,10 @@ class MotionModel(nn.Module):
                 dim=2,
             )
             predicted_mean = torch.cat(
-                (torch.clamp(predicted_mean_pos, min=0, max=self.env_size), predicted_mean_vel),
+                (
+                    torch.clamp(predicted_mean_pos, min=0, max=self.env_size),
+                    predicted_mean_vel,
+                ),
                 dim=-1,
             )  # TODO: clamp also velocities?
             log_predicted_scale_diag = torch.clamp(
@@ -215,14 +217,15 @@ class MotionModel(nn.Module):
 
         # Sample (with gradient) from the resulting distribution -> "reparameterization trick"
         reparam = D.MultivariateNormal(
-            loc=predicted_mean, scale_tril=predicted_scale_tril,
+            loc=predicted_mean,
+            scale_tril=predicted_scale_tril,
         )
         predicted_particle_states = reparam.rsample()
 
         # predicted_particle_states[:, :, 0:2] = predicted_particle_states[:, :, 0:2] * 100  # TODO: also a possibility
 
         torch.clamp_(predicted_particle_states[:, :, :2], min=0, max=self.env_size)
-        # torch.clamp_(predicted_particle_states[:, :, 3:], min=-5, max=5)
+        torch.clamp_(predicted_particle_states[:, :, 2:], min=-10, max=10)
 
         return predicted_particle_states, reparam.precision_matrix
 

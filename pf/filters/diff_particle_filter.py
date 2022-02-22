@@ -18,7 +18,7 @@ class DiffParticleFilter(nn.Module):
         observation_model,
         resample=True,
         estimation_method="weighted_average",
-        log_prob=True,
+        log_prob=False,
     ):
         super().__init__()
 
@@ -90,7 +90,7 @@ class DiffParticleFilter(nn.Module):
             self.particle_log_weights = self.particle_states.new_full(
                 (N, M), float(-np.log(M, dtype=np.float32))
             )
-        assert self.particle_log_weights.shape == (N, M)
+            assert self.particle_log_weights.shape == (N, M)
 
     def forward(self, measurement, beacon_positions):
         N = self.hparams["batch_size"]
