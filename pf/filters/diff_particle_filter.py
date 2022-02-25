@@ -99,9 +99,12 @@ class DiffParticleFilter(nn.Module):
         soft_resample_alpha = self.hparams["soft_resample_alpha"]
 
         # Apply motion model to predict next particle states
-        self.particle_states, precision_matrix = self.motion_model.forward(
-            self.particle_states
+        particle_states_diff, precision_matrix = self.motion_model.forward(
+            self.particle_states.clone()
         )
+        self.particle_states = self.particle_states + particle_states_diff
+        torch.clamp_(self.particle_states[:, :, :2], min=0, max=200)
+        torch.clamp_(self.particle_states[:, :, 2:], min=-10, max=10)
         assert self.particle_states.shape == (N, M, state_dim)
 
         if self.resample:

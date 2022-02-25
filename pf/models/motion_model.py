@@ -52,9 +52,9 @@ class MotionModel(nn.Module):
         # -> shared weights for each particle
         self.model = nn.Sequential(
             nn.Linear(state_dimension, 2 * state_dimension),
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(2 * state_dimension, state_dimension * state_dimension),
-            nn.ReLU(),
+            nn.Tanh(),
             # mean + lower triangular L for covariance matrix
             # S = L * L.T, with L having positive-valued diagonal entries
             nn.Linear(
@@ -133,27 +133,18 @@ class MotionModel(nn.Module):
         if x.shape == (N, M, self.state_dimension * (self.state_dimension + 3) // 2):
             # Split to get the mean and covariance matrix separately
             (
-                predicted_mean_pos,
-                predicted_mean_vel,
+                predicted_mean,
                 log_predicted_scale_diag,
                 predicted_scale_lower,
             ) = torch.split(
                 x,
                 [
-                    2,
-                    self.state_dimension - 2,
+                    self.state_dimension,
                     self.state_dimension,
                     self.state_dimension * (self.state_dimension - 1) // 2,
                 ],
                 dim=2,
             )
-            predicted_mean = torch.cat(
-                (
-                    torch.clamp(predicted_mean_pos, min=0, max=self.env_size),
-                    predicted_mean_vel,
-                ),
-                dim=-1,
-            )  # TODO: clamp also velocities?
             log_predicted_scale_diag = torch.clamp(
                 log_predicted_scale_diag, min=-2, max=1
             )
@@ -224,8 +215,8 @@ class MotionModel(nn.Module):
 
         # predicted_particle_states[:, :, 0:2] = predicted_particle_states[:, :, 0:2] * 100  # TODO: also a possibility
 
-        torch.clamp_(predicted_particle_states[:, :, :2], min=0, max=self.env_size)
-        torch.clamp_(predicted_particle_states[:, :, 2:], min=-10, max=10)
+        #torch.clamp_(predicted_particle_states[:, :, :2], min=0, max=self.env_size)
+        #torch.clamp_(predicted_particle_states[:, :, 2:], min=-10, max=10)
 
         return predicted_particle_states, reparam.precision_matrix
 
