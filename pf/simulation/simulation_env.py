@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from pf.simulation.animation import Animator
+from pf.utils.utils import normalize, unnormalize_estimate
 import math
 from itertools import combinations
 
@@ -192,13 +193,27 @@ class SimulationEnv:
             self._compute_error()
 
         elif self.dpf_:
-            estimate, weights, particles, _ = self.dpf_(
+            setting = {
+                "env_size": torch.from_numpy(np.array([self.env_size_])),
+                "beacons_pos": torch.from_numpy(
+                    np.array(self.beacons_).astype(np.float32)
+                ),
+            }
+            norm_state, norm_measurement, norm_beacon_pos = normalize(
+                None,
                 torch.from_numpy(np.array([self.get_distance(-1)]).astype(np.float32)),
-                torch.from_numpy(np.array(self.beacons_).astype(np.float32)),
+                setting,
             )
-            self.estimate_ = estimate.cpu().detach().numpy()
+            estimate, weights, particles, _ = self.dpf_(
+                norm_measurement,
+                norm_beacon_pos,
+            )
+            unnorm_est, unorm_particles = unnormalize_estimate(
+                estimate.clone().detach(), particles.clone().detach(), self.env_size_
+            )
+            self.estimate_ = unnorm_est
+            self.particles_ = unorm_particles
             self.weights_ = weights.cpu().detach().numpy()
-            self.particles_ = particles.cpu().detach().numpy()
         if self.animate_ and not self.auto_:
             return self.animator_.set_data(
                 self.discs_,

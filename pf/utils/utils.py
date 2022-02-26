@@ -17,13 +17,16 @@ def normalize(state, measurement, setting):
     """Normalize weights and measurements according to envireoment to be between -1,1"""
     env_size = setting["env_size"][0]
 
-    norm_state = state.clone().detach()
     norm_measurement = measurement.clone().detach()
     norm_beacon_pos = setting["beacons_pos"].clone().detach()
 
-    # normalize state
-    norm_state[:, :, :2] = (state[:, :, :2] - (0.5 * env_size)) / (0.5 * env_size)
-    norm_state[:, :, 2:] = state[:, :, 2:] / 3.0
+    if state is not None:
+        # normalize state
+        norm_state = state.clone().detach()
+        norm_state[:, :, :2] = (state[:, :, :2] - (0.5 * env_size)) / (0.5 * env_size)
+        norm_state[:, :, 2:] = state[:, :, 2:] / 3.0
+    else:
+        norm_state = None
 
     # normalize measurement (measurement wont be between -1, 1, but -sqrt(2), sqrt(2))????
     norm_measurement = measurement / env_size
