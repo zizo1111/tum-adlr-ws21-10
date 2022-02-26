@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from pf.filters.diff_particle_filter import DiffParticleFilter
 from pf.utils.dataset import PFDataset, DatasetSeq, Sequence, PFSampler
 from pf.utils.loss import MSE, RMSE, NLL
+from pf.utils.utils import normalize, unnormalize_estimate
 from pf.models.motion_model import MotionModel
 from pf.models.observation_model import ObservationModel
 from pf.simulation.animation import Animator
@@ -31,9 +32,13 @@ def train_epoch(
         measurement = data["measurement"]
         setting = data["setting"]
 
+        norm_state, norm_measurement, norm_beacon_pos = normalize(
+            state, measurement, setting
+        )
+
         # Make predictions for this batch
         estimate, weights, particles_states, precision_matrix = model(
-            measurement, setting["beacons_pos"]
+            norm_measurement, norm_beacon_pos
         )
 
         # Compute the loss and its gradients
@@ -41,10 +46,10 @@ def train_epoch(
         state_reshaped = state.reshape(N, -1)
 
         if loss_fn in [MSE, RMSE]:
-            loss += loss_fn(state_reshaped, estimate)
+            loss += loss_fn(norm_state.reshape(N, -1), estimate)
         elif loss_fn in [NLL]:
             loss += loss_fn(
-                state,
+                norm_state,
                 weights,
                 particles_states,
                 covariance=model.gmm.component_distribution.variance,
@@ -62,13 +67,16 @@ def train_epoch(
             print("  batch {} loss: {}".format(i + 1, last_loss))
             running_loss = 0.0
 
-            env = setting["env_size"].clone().detach().numpy()[0]
+            env_size = setting["env_size"].clone().detach().numpy()[0]
             beac_pos = setting["beacons_pos"].clone().detach().numpy()[0]
             st = state_reshaped.clone().detach().numpy()[0].reshape(1, 4)
-            particles_st = particles_states.clone().detach()[0]
-            est = estimate.clone().detach().numpy()[0].reshape(1, 4)
+            unnorm_est, unorm_particles = unnormalize_estimate(
+                estimate.clone().detach(), particles_states.clone().detach(), env_size
+            )
+            particles_st = unorm_particles[0]
+            est = unnorm_est[0].reshape(1, 4)
             print("train:", est, st)
-            animator = Animator(env, beac_pos, show=False)
+            animator = Animator(env_size, beac_pos, show=True)
             _ = animator.set_data(st, estimate=est, particles=particles_st)
 
             writer.add_scalar(
@@ -98,9 +106,13 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
         measurement = data["measurement"]
         setting = data["setting"]
 
+        norm_state, norm_measurement, norm_beacon_pos = normalize(
+            state, measurement, setting
+        )
+
         # Make predictions for this batch
         estimate, weights, particles_states, precision_matrix = model(
-            measurement, setting["beacons_pos"]
+            norm_measurement, norm_beacon_pos
         )
 
         # Compute the loss and its gradients
@@ -108,10 +120,10 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
         state_reshaped = state.reshape(N, -1)
 
         if loss_fn in [MSE, RMSE]:
-            loss += loss_fn(state_reshaped, estimate)
+            loss += loss_fn(norm_state.reshape(N, -1), estimate)
         elif loss_fn in [NLL]:
             loss += loss_fn(
-                state,
+                norm_state,
                 weights,
                 particles_states,
                 covariance=model.gmm.component_distribution.variance,
@@ -126,13 +138,16 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
             print("Val  batch {} loss: {}".format(i + 1, last_loss))
             running_loss = 0.0
 
-            env = setting["env_size"].clone().detach().numpy()[0]
+            env_size = setting["env_size"].clone().detach().numpy()[0]
             beac_pos = setting["beacons_pos"].clone().detach().numpy()[0]
             st = state_reshaped.clone().detach().numpy()[0].reshape(1, 4)
-            particles_st = particles_states.clone().detach()[0]
-            est = estimate.clone().detach().numpy()[0].reshape(1, 4)
-            print("train:", est, st)
-            animator = Animator(env, beac_pos, show=False)
+            unnorm_est, unorm_particles = unnormalize_estimate(
+                estimate.clone().detach(), particles_states.clone().detach(), env_size
+            )
+            particles_st = unorm_particles[0]
+            est = unnorm_est[0].reshape(1, 4)
+            print("val:", est, st)
+            animator = Animator(env_size, beac_pos, show=True)
             _ = animator.set_data(st, estimate=est, particles=particles_st)
 
             writer.add_scalar(
@@ -278,6 +293,6 @@ def train(train_set, val_set=None, test_set=None):
 
 
 if __name__ == "__main__":
-    train_set = PFDataset("datasets/dataset.npy")
-    val_set = PFDataset("datasets/val_dataset.npy")
+    train_set = PFDataset("datasets/dataset_50.npy")
+    val_set = PFDataset("datasets/dataset_50_val.npy")
     train(train_set, val_set)

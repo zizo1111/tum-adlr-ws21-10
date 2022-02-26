@@ -39,22 +39,31 @@ class PositiveTanh(nn.Module):
 
 
 class MotionModel(nn.Module):
-    def __init__(self, state_dimension: int, env_size: int, mode: str):
+    def __init__(
+        self,
+        state_dimension: int,
+        env_size: int,
+        mode: str,
+        non_linearity: str = "tanh",
+    ):
         super().__init__()
 
         self.state_dimension = state_dimension
         self.env_size = env_size
         self.mode = mode
-
+        if non_linearity.lower() == "tanh":
+            self.non_linearity = nn.Tanh()
+        else:
+            self.non_linearity = nn.ReLU()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Apply motion model per batch element + per each particle
         # -> shared weights for each particle
         self.model = nn.Sequential(
             nn.Linear(state_dimension, 2 * state_dimension),
-            nn.Tanh(),
+            self.non_linearity,
             nn.Linear(2 * state_dimension, state_dimension * state_dimension),
-            nn.Tanh(),
+            self.non_linearity,
             # mean + lower triangular L for covariance matrix
             # S = L * L.T, with L having positive-valued diagonal entries
             nn.Linear(
@@ -215,8 +224,8 @@ class MotionModel(nn.Module):
 
         # predicted_particle_states[:, :, 0:2] = predicted_particle_states[:, :, 0:2] * 100  # TODO: also a possibility
 
-        #torch.clamp_(predicted_particle_states[:, :, :2], min=0, max=self.env_size)
-        #torch.clamp_(predicted_particle_states[:, :, 2:], min=-10, max=10)
+        # torch.clamp_(predicted_particle_states[:, :, :2], min=0, max=self.env_size)
+        # torch.clamp_(predicted_particle_states[:, :, 2:], min=-10, max=10)
 
         return predicted_particle_states, reparam.precision_matrix
 

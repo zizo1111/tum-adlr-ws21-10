@@ -27,7 +27,7 @@ class DiffParticleFilter(nn.Module):
         self.observation_model = observation_model
         self.resample = resample
 
-        self.motion_model.apply(initialize_weight)
+        # self.motion_model.apply(initialize_weight)
         self.observation_model.apply(initialize_weight)
 
         self.particle_states = torch.zeros(size=[])
@@ -57,7 +57,7 @@ class DiffParticleFilter(nn.Module):
         comp = D.Independent(
             D.Normal(
                 torch.hstack(
-                    (torch.rand(M, 2) * env_size, torch.randn(M, state_dim - 2) * 3)
+                    ((torch.rand(M, 2) * 2) - 1, torch.randn(M, state_dim - 2))
                 ),
                 torch.rand(M, state_dim),
             ),
@@ -103,8 +103,9 @@ class DiffParticleFilter(nn.Module):
             self.particle_states.clone()
         )
         self.particle_states = self.particle_states + particle_states_diff
-        torch.clamp_(self.particle_states[:, :, :2], min=0, max=200)
-        torch.clamp_(self.particle_states[:, :, 2:], min=-10, max=10)
+        # print(measurement)
+        torch.clamp_(self.particle_states[:, :, :2], min=-1, max=1)
+        torch.clamp_(self.particle_states[:, :, 2:], min=-2, max=2)
         assert self.particle_states.shape == (N, M, state_dim)
 
         if self.resample:
