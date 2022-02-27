@@ -76,7 +76,7 @@ def train_epoch(
             particles_st = unorm_particles[0]
             est = unnorm_est[0].reshape(1, 4)
             print("train:", est, st)
-            animator = Animator(env_size, beac_pos, show=True)
+            animator = Animator(env_size, beac_pos, show=False)
             _ = animator.set_data(st, estimate=est, particles=particles_st)
 
             writer.add_scalar(
@@ -87,7 +87,7 @@ def train_epoch(
                 animator.get_figure(),
                 global_step=epoch * len(train_loader) + i,
             )
-    return last_loss
+    return last_loss, model
 
 
 def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
@@ -161,7 +161,78 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
     return last_loss
 
 
-def train(train_set, val_set=None, test_set=None):
+def pretrain_motion_epoch(
+    train_loader, model, loss_fn, optimizer, train_set_settings, writer, epoch
+):
+    running_loss = 0.0
+    last_loss = 0.0
+    loss = torch.zeros(size=[])
+    seq_len = train_set_settings["sequence_length"]
+
+    for i, data in enumerate(train_loader):
+        if i % seq_len == 0:
+            # New sequences -> zero everything, and re-initialize beliefs of the PF
+            last_state = None
+        optimizer.zero_grad()
+        loss = torch.zeros(size=[])
+
+        state = data["state"]
+        measurement = data["measurement"]
+        setting = data["setting"]
+
+        norm_state, _, _ = normalize(state, measurement, setting)
+
+        if last_state is not None:
+
+            # Make predictions for this batch
+            particle_states_diff, _ = model(last_state)
+            estimate = last_state + particle_states_diff
+            N = state.shape[0]  # batch_size
+            estimate = estimate.reshape(N, -1)
+            # Compute the loss and its gradients
+            state_reshaped = state.reshape(N, -1)
+
+            if loss_fn in [MSE, RMSE]:
+                loss += loss_fn(norm_state.reshape(N, -1), estimate)
+
+            running_loss += loss.item()
+        last_state = norm_state
+        if i % seq_len == seq_len - 1:
+            loss /= seq_len
+            loss.backward()
+            # Adjust learning weights
+            optimizer.step()
+
+            last_loss = running_loss / (seq_len * seq_len)
+            print("Motion  batch {} loss: {}".format(i + 1, last_loss))
+            running_loss = 0.0
+
+            env_size = setting["env_size"].clone().detach().numpy()[0]
+            beac_pos = setting["beacons_pos"].clone().detach().numpy()[0]
+            st = state_reshaped.clone().detach().numpy()[0].reshape(1, 4)
+            unnorm_est, _ = unnormalize_estimate(
+                estimate.clone().detach(), None, env_size
+            )
+            est = unnorm_est[0].reshape(1, 4)
+            print("Motion model train:", est, st)
+            print(estimate[0], est)
+            animator = Animator(env_size, beac_pos, show=True)
+            _ = animator.set_data(st, estimate=est)
+
+            writer.add_scalar(
+                "Motion training loss",
+                last_loss / seq_len,
+                epoch * len(train_loader) + i,
+            )
+            writer.add_figure(
+                "Motion estimation vs. actual",
+                animator.get_figure(),
+                global_step=epoch * len(train_loader) + i,
+            )
+    return last_loss, model
+
+
+def train(train_set, val_set=None, test_set=None, pretrain_motion=True):
     # General configuration #
     state_dim = 4
     env_size = 200
@@ -194,11 +265,6 @@ def train(train_set, val_set=None, test_set=None):
         "batch_size": 8,
     }
 
-    pf_model = DiffParticleFilter(
-        hparams=hparams,
-        motion_model=dynamics_model,
-        observation_model=observation_model,
-    )
     sampler = PFSampler(train_set, hparams["batch_size"])
     train_dataloader = DataLoader(
         train_set,
@@ -221,24 +287,51 @@ def train(train_set, val_set=None, test_set=None):
     loss_fn = MSE
     assert loss_fn in losses
 
-    # TODO change optimizer
-    optimizer = torch.optim.Adam(pf_model.parameters(), lr=1.0e-3)
-
-    EPOCHS = 100
-    print(pf_model)
+    train_set_settings = train_set.get_settings()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    writer = SummaryWriter("runs/exp1")
+
+    if pretrain_motion:
+        # TODO change optimizer
+        optimizer = torch.optim.Adam(dynamics_model.parameters(), lr=1.0e-3)
+        dynamics_model.to(device)
+        dynamics_model.train(True)
+        PRE_EPOCHS = 10
+        for i in range(PRE_EPOCHS):
+            epoch_loss, dynamics_model = pretrain_motion_epoch(
+                train_dataloader,
+                dynamics_model,
+                loss_fn,
+                optimizer,
+                train_set_settings,
+                writer,
+                i,
+            )
+        print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
+
+    # return
+    EPOCHS = 100
+
+    pf_model = DiffParticleFilter(
+        hparams=hparams,
+        motion_model=dynamics_model,
+        observation_model=observation_model,
+    )
+
+    print(pf_model)
     pf_model.to(device)
     pf_model.train(True)
-    train_set_settings = train_set.get_settings()
+
+    # TODO change optimizer
+    optimizer = torch.optim.Adam(pf_model.parameters(), lr=1.0e-3)
 
     patience = 5
     curr_patience = 0
     last_loss = 1e8
-    writer = SummaryWriter("runs/exp1")
     state_dict = None
     saved = False
     for i in range(EPOCHS):
-        epoch_loss = train_epoch(
+        epoch_loss, pf_model = train_epoch(
             train_dataloader,
             pf_model,
             loss_fn,

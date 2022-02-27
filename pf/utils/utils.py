@@ -61,13 +61,17 @@ def unnormalize_estimate(estimate, particles, env_size):
     """Unnormalize weights and measurements according to envireoment to real values"""
 
     unnorm_estimate = estimate.clone()
-    unnorm_particles = particles.clone()
 
-    # unnormalize particles
-    unnorm_particles[:, :, :2] = (particles[:, :, :2] * (0.5 * env_size)) + (
-        0.5 * env_size
-    )
-    unnorm_particles[:, :, 2:] = particles[:, :, 2:] * 3.0
+    if particles is not None:
+        unnorm_particles = particles.clone()
+
+        # unnormalize particles
+        unnorm_particles[:, :, :2] = (particles[:, :, :2] * (0.5 * env_size)) + (
+            0.5 * env_size
+        )
+        unnorm_particles[:, :, 2:] = particles[:, :, 2:] * 3.0
+    else:
+        unnorm_particles = None
 
     # unnormalize estimate
     unnorm_estimate[:, :2] = (estimate[:, :2] * (0.5 * env_size)) + (0.5 * env_size)

@@ -196,7 +196,7 @@ class SimulationEnv:
             setting = {
                 "env_size": torch.from_numpy(np.array([self.env_size_])),
                 "beacons_pos": torch.from_numpy(
-                    np.array(self.beacons_).astype(np.float32)
+                    np.array([self.beacons_]).astype(np.float32)
                 ),
             }
             norm_state, norm_measurement, norm_beacon_pos = normalize(
