@@ -232,7 +232,7 @@ def pretrain_motion_epoch(
     return last_loss, model
 
 
-def train(train_set, val_set=None, test_set=None, pretrain_motion=True):
+def train(train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weights=True):
     # General configuration #
     state_dim = 4
     env_size = 200
@@ -283,15 +283,18 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True):
             num_workers=0,
             sampler=val_sampler,
         )
+
     losses = [MSE, RMSE, NLL]
-    loss_fn = MSE
-    assert loss_fn in losses
+    losses_pretrain_motion = [MSE, RMSE]
 
     train_set_settings = train_set.get_settings()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     writer = SummaryWriter("runs/exp1")
 
     if pretrain_motion:
+        loss_fn = MSE
+        assert loss_fn in losses_pretrain_motion
+
         # TODO change optimizer
         optimizer = torch.optim.Adam(dynamics_model.parameters(), lr=1.0e-3)
         dynamics_model.to(device)
@@ -307,10 +310,12 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True):
                 writer,
                 i,
             )
-        print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
+            print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
 
     # return
     EPOCHS = 100
+    loss_fn = MSE
+    assert loss_fn in losses
 
     pf_model = DiffParticleFilter(
         hparams=hparams,
@@ -320,12 +325,21 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True):
 
     print(pf_model)
     pf_model.to(device)
-    pf_model.train(True)
 
-    # TODO change optimizer
-    optimizer = torch.optim.Adam(pf_model.parameters(), lr=1.0e-3)
+    if pretrain_motion and fix_weights:  # fix weights of dynamics model
+        dynamics_model.train(False)
+        observation_model.train(True)
 
-    patience = 5
+        for param in dynamics_model.parameters():
+            param.requires_grad = False
+        optimizer = torch.optim.Adam(observation_model.parameters(), lr=5.0e-4)
+    else:
+        pf_model.train(True)
+
+        # TODO change optimizer
+        optimizer = torch.optim.Adam(pf_model.parameters(), lr=1.0e-3)  # TODO: use `weight_decay=1.0e-2`?
+
+    patience = 3
     curr_patience = 0
     last_loss = 1e8
     state_dict = None
