@@ -59,7 +59,7 @@ class DiffParticleFilter(nn.Module):
                 torch.hstack(
                     ((torch.rand(M, 2) * 2) - 1, torch.randn(M, state_dim - 2))
                 ),
-                torch.rand(M, state_dim),
+                torch.rand(M, state_dim) + torch.full((M, state_dim), 1e-5),
             ),
             1,
         )

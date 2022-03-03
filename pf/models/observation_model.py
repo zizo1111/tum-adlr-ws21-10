@@ -24,6 +24,7 @@ class ObservationModel(nn.Module):
         env_size: int,
         num_particles: int = 100,
         num_beacons: int = 2,
+        num_discs: int = 1,
         device: str = "cpu",
         non_linearity: str = "relu",
     ):
@@ -32,6 +33,7 @@ class ObservationModel(nn.Module):
         self.env_size = env_size
         self.num_particles_ = num_particles
         self.num_beacons = num_beacons
+        self.num_discs = num_discs
         # inspired by the paper
         self.min_obs_likelihood = 0.004
 
@@ -43,7 +45,9 @@ class ObservationModel(nn.Module):
             self.non_linearity = nn.ReLU()
 
         self.model = nn.Sequential(
-            nn.Linear(state_dimension + (num_beacons * 3), 32),
+            nn.Linear(
+                state_dimension + (num_beacons * 2) + (num_beacons * num_discs), 32
+            ),
             self.non_linearity,
             nn.Linear(32, 32),
             self.non_linearity,

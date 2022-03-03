@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 
 class Animator:
-    def __init__(self, size, beacons, show=True):
+    def __init__(self, size, beacons, show=True, save_video=False):
         self.env_size_ = size
         self.fig = plt.figure()
         self.show = show
@@ -17,6 +17,10 @@ class Animator:
         # set up the figure
         self.fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
         fig_size = self.env_size_ + 100
+        self.save_video = save_video
+        if self.save_video:
+            fourcc = cv2.VideoWriter_fourcc(*"XVID")
+            self.out = cv2.VideoWriter("output.avi", fourcc, 20.0, (640, 480))
         self.ax = self.fig.add_subplot(
             5,
             1,
@@ -29,6 +33,7 @@ class Animator:
 
         # discs_vis holds the locations of the discs
         (self.discs_vis,) = self.ax.plot([], [], "ko", ms=6)
+        (self.main_disc_vis,) = self.ax.plot([], [], "mo", ms=6)
 
         # beacons drawn as red dots
         (self.beacons_vis,) = self.ax.plot([], [], "ro", ms=6)
@@ -60,8 +65,9 @@ class Animator:
         self.rect.set_edgecolor("k")
 
         if self.discs_ is not None:
-            self.discs_vis.set_data(self.discs_[:, 0], self.discs_[:, 1])
-
+            self.main_disc_vis.set_data(self.discs_[0, 0], self.discs_[0, 1])
+            if self.discs_.shape[0] > 1:
+                self.discs_vis.set_data(self.discs_[1:, 0], self.discs_[1:, 1])
         # update particles visualization
         if self.particles_ is not None:
             self.particles_vis.set_data(self.particles_[:, 0], self.particles_[:, 1])
@@ -93,8 +99,11 @@ class Animator:
 
             if cv2.waitKey(10) == 27:
                 cv2.destroyAllWindows()
+                if self.save_video:
+                    self.out.release()
                 return False
-
+        if self.save_video:
+            self.out.write(self.convert(self.fig))
         return True
 
     def get_figure(self):
