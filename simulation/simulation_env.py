@@ -44,7 +44,7 @@ class SimulationEnv:
 
             # Error propagation
             self.timesteps = 0
-            self.rmse = 0
+            self.mse = 0
 
         # auto process steps
         self.auto_ = auto
@@ -159,12 +159,12 @@ class SimulationEnv:
 
     def _compute_error(self):
         """
-        Computes the sum of squared Euclidean errors for all previous timesteps
-        Note: The error is not averaged
+        Computes the error (MSE) at each timestep
+        Note: The error is not averaged over all timesteps!
 
-        :return: sum of squared errors
+        :return: MSE at each timestep
         """
-        self.rmse += np.linalg.norm(self.discs_[0] - self.estimate_[0])  # 0th disc is always predicted
+        self.mse += np.linalg.norm(self.discs_[0] - self.estimate_)  # 0th disc is always predicted
         self.timesteps += 1
 
     def get_reading(self, beacon_num):
@@ -221,14 +221,11 @@ class SimulationEnv:
 
     def get_error(self):
         """
-        Returns overall error (RMSE)
+        Returns overall error (MSE)
 
-        :return: current RMSE, averaged over all timesteps
+        :return: current MSE, averaged over all timesteps
         """
-        return np.sqrt(self.rmse / self.timesteps)
-
-    def get_timestep(self):
-        return self.timesteps
+        return self.mse / self.timesteps
 
     def get_setup(self):
         """
