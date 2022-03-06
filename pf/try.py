@@ -55,9 +55,9 @@ def run_diff_filter(test_path=None):
     mode = "collide"
     num_discs = 1
     # PF config #
-    num_particles = 100
+    num_particles = 1000
 
-    # beacons config -> TODO #
+    # beacons config #
     num_beacons = 2
 
     dynamics_model = MotionModel(
@@ -103,7 +103,6 @@ def run_diff_filter(test_path=None):
         )
 
         print(test_env.get_error())
-
     else:
         set = DatasetSeq()
         set.load_dataset(test_path)
@@ -124,11 +123,3 @@ def load_dataset(path=None):
 if __name__ == "__main__":
     # run_filter()
     run_diff_filter()
-    # create_dataset()
-    # import numpy as np
-
-    # pos = np.array([[[0, 1], [2, 3]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]])
-    # beacon_t = pos  # np.tile(pos, (8, 1, 1))
-    # test = beacon_t.reshape(3, -1)
-    # t1 = np.tile(test[:, np.newaxis], (1, 5, 1))
-    # print(beacon_t.shape, test.shape, t1.shape, t1)

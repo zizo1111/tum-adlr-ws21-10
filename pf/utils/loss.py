@@ -30,9 +30,21 @@ def RMSE(gt, estimate):
     return torch.sqrt(torch.mean((gt - estimate) ** 2))
 
 
-# TODO nll
-# https://github.com/akloss/differentiable_filters/blob/821889dec411927658c6ef7dd01c9028d2f28efd/differentiable_filters/contexts/base_context.py#L341
 def NLL(gt, weights, particle_states, covariance=None, precision_matrix=None, reduce_mean=True):
+    """
+    Returns negative log-likelihood (NLL) loss. Best suited for the initialization using GMM.
+
+    Implemented according to ideas from
+    https://github.com/akloss/differentiable_filters/blob/821889dec411927658c6ef7dd01c9028d2f28efd/differentiable_filters/contexts/base_context.py#L341
+
+    :param gt: Ground truth state of the disc
+    :param weights: Particle weights
+    :param particle_states: States of all particles
+    :param covariance: Covariance matrices of all particles from the GMM distribution
+    :param precision_matrix: Inverse of covariance (preferred over `covariance` attribute)
+    :param reduce_mean: True if the average over all particles should be computed
+    :return: NLL loss
+    """
     N = particle_states.shape[0]  # batch size
     M = particle_states.shape[1]  # number of particles
     state_dim = particle_states.shape[-1]
@@ -88,8 +100,7 @@ def NLL(gt, weights, particle_states, covariance=None, precision_matrix=None, re
     )
 
     exp = torch.exp(log_like)
-    # the per particle likelihoods are weighted and summed in the particle
-    # dimension
+    # the per particle likelihoods are weighted and summed in the particle dimension
     weighted = weights * exp.reshape(weights.shape)
 
     weighted = torch.sum(weighted, dim=-1)

@@ -66,7 +66,6 @@ class Sequence:
             The current state (position) of the discs wrt to
             given beacon
         """
-        ## i dont think we need that ?
         reading = []
         for disc_num in range(self.num_discs_):
             reading.append(self.states_[idx][disc_num][:2] - self.beacons_[beacon_num])
@@ -85,10 +84,8 @@ class Sequence:
             The he absolute distance between the discs and the
             given beacon
         """
-        # TODO should also noise be added here?
         noise = np.random.normal(loc=0.0, scale=0.1, size=self.num_beacons_)
 
-        dists = []
         dists = []
         if beacon_num != -1:
             for disc_num in range(self.num_discs_):

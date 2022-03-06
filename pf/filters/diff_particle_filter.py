@@ -1,7 +1,6 @@
 import torch
 import torch.distributions as D
 import torch.nn as nn
-import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -38,11 +37,9 @@ class DiffParticleFilter(nn.Module):
 
         self.log_prob = log_prob
 
-        N = self.hparams["batch_size"]
         M = self.hparams["num_particles"]
         state_dim = self.hparams["state_dimension"]
-
-        self.cov = nn.Parameter(
+        self.component_covariances = nn.Parameter(  # learnable covariance matrices of GMM
             (
                 torch.rand(M, state_dim)
                 + torch.full((M, state_dim), 1e-9, dtype=torch.float32)
@@ -58,30 +55,32 @@ class DiffParticleFilter(nn.Module):
         N = self.hparams["batch_size"]
         M = self.hparams["num_particles"]
         state_dim = self.hparams["state_dimension"]
-        env_size = self.hparams["env_size"]
+
+        self.component_covariances.data = torch.clamp(
+            self.component_covariances.data, min=10e-9
+        )  # covariance must remain positive for each new sequence initialization
 
         # Sample particles as GMM
-        mix = D.Categorical(
-            torch.ones(
-                M,
-            )
-        )
-        self.cov.data = torch.clamp(self.cov.data, min=10e-9)
-        self.normals = D.Normal(
-            torch.hstack(((torch.rand(M, 2) * 2) - 1, torch.randn(M, state_dim - 2))),
-            self.cov,
-        )
+        mix = D.Categorical(torch.ones(M,))
         comp = D.Independent(
-            self.normals,
+            D.Normal(
+                torch.hstack(
+                    ((torch.rand(M, 2) * 2) - 1, torch.randn(M, state_dim - 2))
+                ),
+                self.component_covariances,
+            ),
             1,
         )
-        self.gmm = D.MixtureSameFamily(mix, comp)
+        gmm = D.MixtureSameFamily(mix, comp)
 
-        self.particle_states = self.gmm.sample((N, M))
+        self.particle_states = gmm.sample((N, M))
         assert self.particle_states.shape == (N, M, state_dim)
 
         # Visualize for debugging purposes:
-        """plt.scatter(x=self.particle_states[0, :, 0], y=self.particle_states[0, :, 1])
+        """
+        import matplotlib.pyplot as plt
+
+        plt.scatter(x=self.particle_states[0, :, 0], y=self.particle_states[0, :, 1])
         plt.quiver(
             self.particle_states[0, :, 0],
             self.particle_states[0, :, 1],
@@ -110,27 +109,25 @@ class DiffParticleFilter(nn.Module):
         state_dim = self.hparams["state_dimension"]
         soft_resample_alpha = self.hparams["soft_resample_alpha"]
 
-        # Apply motion model to predict next particle states
-        particle_states_diff, precision_matrix = self.motion_model.forward(
-            self.particle_states.clone()
-        )
+        # 1. Apply motion model to predict next particle states
+        particle_states_diff = self.motion_model.forward(self.particle_states.clone())
         self.particle_states = self.particle_states + particle_states_diff
-        # print(measurement)
-        torch.clamp_(self.particle_states[:, :, :2], min=-1, max=1)
-        torch.clamp_(self.particle_states[:, :, 2:], min=-2, max=2)
         assert self.particle_states.shape == (N, M, state_dim)
 
+        # Clamp particle states to stay within environment boundaries:
+        torch.clamp_(self.particle_states[:, :, :2], min=-1, max=1)
+        torch.clamp_(self.particle_states[:, :, 2:], min=-2, max=2)
+
+        # 2. Apply soft-resampling
         if self.resample:
             if not self.log_prob:
                 self._soft_resample(soft_resample_alpha)
             else:
                 self._resample(soft_resample_alpha)
 
-        # Apply observation model to get the likelihood for each particle
+        # 3. Apply observation model to get the likelihood for each particle
         input_obs = self.observation_model.prepare_input(
-            self.particle_states,
-            beacon_positions,
-            measurement,
+            self.particle_states, beacon_positions, measurement,
         )
         observation_lik = self.observation_model(input_obs)
         assert observation_lik.shape == (N, M)
@@ -139,7 +136,6 @@ class DiffParticleFilter(nn.Module):
             # Update particle weights
             self.weights *= observation_lik
             self.weights /= torch.sum(self.weights, dim=1, keepdim=True)
-
         else:
             self.particle_log_weights = self.particle_log_weights + observation_lik
             self.particle_log_weights = self.particle_log_weights - torch.logsumexp(
@@ -152,7 +148,7 @@ class DiffParticleFilter(nn.Module):
             torch.sum(self.weights, dim=1, keepdim=True), torch.ones(N)
         )
 
-        # compute estimate
+        # 4. Compute estimate
         if self.estimation_method == "weighted_average":
             self.estimates = torch.sum(
                 self.weights.clone().unsqueeze(-1) * self.particle_states, dim=1
@@ -164,7 +160,7 @@ class DiffParticleFilter(nn.Module):
 
         assert self.estimates.shape == (N, state_dim)
 
-        return self.estimates, self.weights, self.particle_states, precision_matrix
+        return self.estimates, self.weights, self.particle_states
 
     def _soft_resample(self, alpha):
         """
@@ -179,10 +175,6 @@ class DiffParticleFilter(nn.Module):
             dim=0,
         )  # q(k)
         self.weights = self.weights / probs  # w' -> stays un-normalized
-
-        # TODO: i dont think this is true, but the only way to get normalized weights
-        # self.weights /= torch.sum(self.weights, dim=1, keepdim=True)
-
         assert probs.shape == (N, M)
 
         # Sampling from q(k) is left
@@ -201,7 +193,11 @@ class DiffParticleFilter(nn.Module):
         assert self.particle_states.shape == (N, M, state_dim)
 
     def _resample(self, soft_resample_alpha) -> None:
-        """Resample particles."""
+        """
+        Resample particles, but in log-weights.
+
+        Taken from https://github.com/stanford-iprl-lab/torchfilter to verify that our implementation works.
+        """
         # Note the distinction between `M`, the current number of particles, and
         # `self.num_particles`, the desired number of particles
         N, M, state_dim = self.particle_states.shape
