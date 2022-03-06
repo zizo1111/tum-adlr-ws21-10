@@ -24,28 +24,39 @@ class ObservationModel(nn.Module):
         env_size: int,
         num_particles: int = 100,
         num_beacons: int = 2,
+        num_discs: int = 1,
         device: str = "cpu",
+        non_linearity: str = "relu",
     ):
         super().__init__()
         self.state_dimension = state_dimension
         self.env_size = env_size
         self.num_particles_ = num_particles
         self.num_beacons = num_beacons
+        self.num_discs = num_discs
         # inspired by the paper
         self.min_obs_likelihood = 0.004
 
         self.device = device
+
+        if non_linearity.lower() == "tanh":
+            self.non_linearity = nn.Tanh()
+        else:
+            self.non_linearity = nn.ReLU()
+
         self.model = nn.Sequential(
-            nn.Linear(state_dimension + (num_beacons * 3), 32),
-            nn.ReLU(),
+            nn.Linear(
+                state_dimension + (num_beacons * 2) + (num_beacons * num_discs), 32
+            ),
+            self.non_linearity,
             nn.Linear(32, 32),
-            nn.ReLU(),
+            self.non_linearity,
             nn.Linear(32, 16),
-            nn.ReLU(),
+            self.non_linearity,
             nn.Linear(16, 16),
-            nn.ReLU(),
+            self.non_linearity,
             nn.Linear(16, 1),
-            nn.Sigmoid(),
+            self.non_linearity,
             Lambda(
                 lambda x: x * (1 - self.min_obs_likelihood) + self.min_obs_likelihood,
                 lambda: 1 - self.min_obs_likelihood,

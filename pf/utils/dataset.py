@@ -96,8 +96,9 @@ class Sequence:
                 dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
         else:
             for disc_num in range(self.num_discs_):
-                pos = self.states_[idx][disc_num][:2] - self.beacons_[beacon_num]
-                dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
+                for beacon in self.beacons_:
+                    pos = self.states_[idx][disc_num][:2] - beacon
+                    dists.append(math.sqrt(pos[0] ** 2 + pos[1] ** 2))
         return np.asarray(dists + noise)
 
     def play(self):

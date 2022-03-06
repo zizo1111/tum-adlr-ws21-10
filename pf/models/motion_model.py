@@ -39,34 +39,42 @@ class PositiveTanh(nn.Module):
 
 
 class MotionModel(nn.Module):
-    def __init__(self, state_dimension: int, env_size: int, mode: str):
+    def __init__(
+        self,
+        state_dimension: int,
+        env_size: int,
+        mode: str,
+        non_linearity: str = "tanh",
+    ):
         super().__init__()
 
         self.state_dimension = state_dimension
         self.env_size = env_size
         self.mode = mode
-
+        if non_linearity.lower() == "tanh":
+            self.non_linearity = nn.Tanh()
+        else:
+            self.non_linearity = nn.ReLU()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Apply motion model per batch element + per each particle
         # -> shared weights for each particle
         self.model = nn.Sequential(
             nn.Linear(state_dimension, 2 * state_dimension),
-            nn.ReLU(),
+            self.non_linearity,
             nn.Linear(2 * state_dimension, state_dimension * state_dimension),
-            nn.ReLU(),
+            self.non_linearity,
             # mean + lower triangular L for covariance matrix
             # S = L * L.T, with L having positive-valued diagonal entries
             nn.Linear(
                 state_dimension * state_dimension,
                 state_dimension * (state_dimension + 3) // 2,
             ),
-            #nn.Tanh(),
-            #nn.Linear(
+            # nn.Linear(
             #   state_dimension * (state_dimension + 3) // 2,
             #   state_dimension * (state_dimension + 1),
-            #),
-            #PositiveTanh(),  # TODO: think of possible use
+            # ),
+            # PositiveTanh(),  # TODO: think of possible use
         )
 
     def standard_forward(
@@ -134,24 +142,18 @@ class MotionModel(nn.Module):
         if x.shape == (N, M, self.state_dimension * (self.state_dimension + 3) // 2):
             # Split to get the mean and covariance matrix separately
             (
-                predicted_mean_pos,
-                predicted_mean_vel,
+                predicted_mean,
                 log_predicted_scale_diag,
                 predicted_scale_lower,
             ) = torch.split(
                 x,
                 [
-                    2,
-                    self.state_dimension - 2,
+                    self.state_dimension,
                     self.state_dimension,
                     self.state_dimension * (self.state_dimension - 1) // 2,
                 ],
                 dim=2,
             )
-            predicted_mean = torch.cat(
-                (torch.clamp(predicted_mean_pos, min=0, max=self.env_size), predicted_mean_vel),
-                dim=-1,
-            )  # TODO: clamp also velocities?
             log_predicted_scale_diag = torch.clamp(
                 log_predicted_scale_diag, min=-2, max=1
             )
@@ -215,14 +217,15 @@ class MotionModel(nn.Module):
 
         # Sample (with gradient) from the resulting distribution -> "reparameterization trick"
         reparam = D.MultivariateNormal(
-            loc=predicted_mean, scale_tril=predicted_scale_tril,
+            loc=predicted_mean,
+            scale_tril=predicted_scale_tril,
         )
         predicted_particle_states = reparam.rsample()
 
         # predicted_particle_states[:, :, 0:2] = predicted_particle_states[:, :, 0:2] * 100  # TODO: also a possibility
 
-        torch.clamp_(predicted_particle_states[:, :, :2], min=0, max=self.env_size)
-        # torch.clamp_(predicted_particle_states[:, :, 3:], min=-5, max=5)
+        # torch.clamp_(predicted_particle_states[:, :, :2], min=0, max=self.env_size)
+        # torch.clamp_(predicted_particle_states[:, :, 2:], min=-10, max=10)
 
         return predicted_particle_states, reparam.precision_matrix
 
