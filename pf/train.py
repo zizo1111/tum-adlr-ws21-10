@@ -20,6 +20,8 @@ def train_epoch(
     last_loss = 0.0
     loss = torch.zeros(size=[])
     seq_len = train_set_settings["sequence_length"]
+    # save video
+    # animator = None
 
     for i, data in enumerate(train_loader):
         if i % seq_len == 0:
@@ -52,12 +54,28 @@ def train_epoch(
                 norm_state,
                 weights,
                 particles_states,
-                covariance=model.gmm.component_distribution.variance,
-                precision_matrix=precision_matrix,
+                covariance=model.cov,
+                precision_matrix=None,
             )
 
+        # save video
+        # env_size = setting["env_size"].clone().detach().numpy()[0]
+        # beac_pos = setting["beacons_pos"].clone().detach().numpy()[0]
+        # st = state_reshaped.clone().detach().numpy()[0].reshape(1, 4)
+        # unnorm_est, unorm_particles = unnormalize_estimate(
+        #     estimate.clone().detach(), particles_states.clone().detach(), env_size
+        # )
+        # if epoch == 499:
+        #     if animator is None:
+        #         animator = Animator(env_size, beac_pos, show=False, save_video=True)
+        #     particles_st = unorm_particles[0]
+        #     est = unnorm_est[0].reshape(1, 4)
+        #     _ = animator.set_data(st, estimate=est, particles=particles_st)
         running_loss += loss.item()
         if i % seq_len == seq_len - 1:
+            # save video
+            # if epoch == 499:
+            #     animator.out.release()
             loss /= seq_len
             loss.backward()
             # Adjust learning weights
@@ -232,7 +250,9 @@ def pretrain_motion_epoch(
     return last_loss, model
 
 
-def train(train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weights=True):
+def train(
+    train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weights=False
+):
     # General configuration #
     state_dim = 4
     env_size = 200
@@ -254,6 +274,7 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weig
         env_size=env_size,
         num_particles=num_particles,
         num_beacons=num_beacons,
+        num_discs=num_discs,
     )
 
     # Hyperparameters for differential filter #
@@ -262,7 +283,7 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weig
         "state_dimension": state_dim,
         "env_size": env_size,
         "soft_resample_alpha": 0.7,
-        "batch_size": 8,
+        "batch_size": 1,
     }
 
     sampler = PFSampler(train_set, hparams["batch_size"])
@@ -299,7 +320,7 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weig
         optimizer = torch.optim.Adam(dynamics_model.parameters(), lr=1.0e-3)
         dynamics_model.to(device)
         dynamics_model.train(True)
-        PRE_EPOCHS = 10
+        PRE_EPOCHS = 100
         for i in range(PRE_EPOCHS):
             epoch_loss, dynamics_model = pretrain_motion_epoch(
                 train_dataloader,
@@ -313,8 +334,8 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weig
             print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
 
     # return
-    EPOCHS = 100
-    loss_fn = MSE
+    EPOCHS = 500
+    loss_fn = NLL
     assert loss_fn in losses
 
     pf_model = DiffParticleFilter(
@@ -330,20 +351,30 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weig
         dynamics_model.train(False)
         observation_model.train(True)
 
-        for param in dynamics_model.parameters():
-            param.requires_grad = False
-        optimizer = torch.optim.Adam(observation_model.parameters(), lr=5.0e-4)
+        # for param in dynamics_model.parameters():
+        #     param.requires_grad = False
+        optimizer = torch.optim.Adam(observation_model.parameters(), lr=1.0e-4)
     else:
         pf_model.train(True)
 
         # TODO change optimizer
-        optimizer = torch.optim.Adam(pf_model.parameters(), lr=1.0e-3)  # TODO: use `weight_decay=1.0e-2`?
-
+        optimizer = torch.optim.Adam(
+            pf_model.parameters(), lr=5.0e-4
+        )  # TODO: use `weight_decay=1.0e-2`?
+        # for param in pf_model.parameters():
+        #     if param.requires_grad:
+        # for name, param in pf_model.state_dict().items():
+        #     print(name, param.size())
+        decayRate = 0.98
+        my_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            optimizer=optimizer, gamma=decayRate
+        )
     patience = 3
     curr_patience = 0
     last_loss = 1e8
     state_dict = None
     saved = False
+    old_cov = pf_model.cov.clone().detach()
     for i in range(EPOCHS):
         epoch_loss, pf_model = train_epoch(
             train_dataloader,
@@ -354,8 +385,12 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weig
             writer,
             i,
         )
+        # print(pf_model.cov - old_cov)
+        old_cov = pf_model.cov.clone().detach()
         print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
 
+        if i % 2 == 0 and i > 0:
+            my_lr_scheduler.step()
         if val_set:
             epoch_loss_val = val_epoch(
                 val_dataloader,
@@ -400,6 +435,6 @@ def train(train_set, val_set=None, test_set=None, pretrain_motion=True, fix_weig
 
 
 if __name__ == "__main__":
-    train_set = PFDataset("datasets/dataset_50.npy")
+    train_set = PFDataset("datasets/over_dataset2.npy")
     val_set = PFDataset("datasets/dataset_50_val.npy")
-    train(train_set, val_set)
+    train(train_set)

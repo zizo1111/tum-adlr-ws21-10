@@ -38,6 +38,18 @@ class DiffParticleFilter(nn.Module):
 
         self.log_prob = log_prob
 
+        N = self.hparams["batch_size"]
+        M = self.hparams["num_particles"]
+        state_dim = self.hparams["state_dimension"]
+
+        self.cov = nn.Parameter(
+            (
+                torch.rand(M, state_dim)
+                + torch.full((M, state_dim), 1e-9, dtype=torch.float32)
+            ),
+            requires_grad=True,
+        )
+
     def init_beliefs(self):
         """
         Sample particle states from a GMM, and assign a new set of uniform weights.
@@ -54,14 +66,13 @@ class DiffParticleFilter(nn.Module):
                 M,
             )
         )
+        self.cov.data = torch.clamp(self.cov.data, min=10e-9)
+        self.normals = D.Normal(
+            torch.hstack(((torch.rand(M, 2) * 2) - 1, torch.randn(M, state_dim - 2))),
+            self.cov,
+        )
         comp = D.Independent(
-            D.Normal(
-                torch.hstack(
-                    ((torch.rand(M, 2) * 2) - 1, torch.randn(M, state_dim - 2))
-                ),
-                torch.rand(M, state_dim)
-                + torch.full((M, state_dim), 1e-9, dtype=torch.float32),
-            ),
+            self.normals,
             1,
         )
         self.gmm = D.MixtureSameFamily(mix, comp)
