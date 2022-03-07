@@ -56,6 +56,10 @@ class SimulationEnv:
         if dp_filter:
             self.dpf_ = dp_filter
 
+            # Error propagation
+            self.timesteps = 0
+            self.rmse = 0
+
         # auto process steps
         self.auto_ = auto
 
@@ -99,7 +103,8 @@ class SimulationEnv:
             _ = self.animator_.set_data(self.discs_, self.particles_, self.estimate_,)
             self.anim_start_ = True
 
-        self._compute_error()
+        if p_filter:
+            self._compute_error()
         self.exit = False
 
         if self.auto_:
@@ -191,8 +196,8 @@ class SimulationEnv:
             self.filter_.run(self.beacons_, self.get_distance(-1), dt)
             self.particles_ = self.filter_.get_particles()
             self.estimate_ = self.filter_.get_estimate()
-            self._compute_error()
 
+            self._compute_error()
         elif self.dpf_:
             setting = {
                 "env_size": torch.from_numpy(np.array([self.env_size_])),
@@ -212,6 +217,8 @@ class SimulationEnv:
             self.estimate_ = unnorm_est
             self.particles_ = unorm_particles
             self.weights_ = weights.cpu().detach().numpy()
+
+            self._compute_error()
         if self.animate_ and not self.auto_:
             return self.animator_.set_data(
                 self.discs_, self.particles_, self.estimate_,
@@ -226,7 +233,7 @@ class SimulationEnv:
         """
         # TODO: indices changed to reduce error to positioning only
         self.rmse += np.linalg.norm(
-            self.discs_[0][:2] - self.estimate_[0][:2]
+            self.discs_[0][:2] - np.array(self.estimate_[0][:2])
         )  # 0th disc is always predicted
 
         self.error_each_step[self.timesteps] = np.sqrt(self.rmse / (self.timesteps + 1))

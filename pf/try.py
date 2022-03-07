@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn.functional as F
 import torch
@@ -41,11 +42,12 @@ def run_filter():
         num_beacons=num_beacons,
         mode="collide",
         auto=True,
-        animate=True,
+        animate=False,
         p_filter=particle_filter,
     )
 
     print(test_env.get_error())
+    return test_env.get_error_each_timestep()
 
 
 def run_diff_filter(test_path=None):
@@ -98,11 +100,12 @@ def run_diff_filter(test_path=None):
             num_beacons=num_beacons,
             mode=mode,
             auto=True,
-            animate=True,
+            animate=False,
             dp_filter=pf_model,
         )
 
         print(test_env.get_error())
+        return test_env.get_error_each_timestep()
     else:
         set = DatasetSeq()
         set.load_dataset(test_path)
@@ -121,6 +124,19 @@ def load_dataset(path=None):
 
 
 if __name__ == "__main__":
-    # run_filter()
-    run_diff_filter()
-    # create_dataset()
+    results = np.empty([100, 100])
+    for i in range(100):
+        res = run_diff_filter()
+        results[i] = res
+        print(f"Sequence {i} done, with the min. error of {res.min()} at timestep {np.argmin(res)}")
+
+    plt.clf()
+    x = np.arange(100)
+    y = np.mean(results, axis=0)
+
+    plt.title('Diff PF: Average (over 100 sequences) RMSE for each timestep')
+    plt.xlabel('Timesteps')
+    plt.ylabel('Average RMSE')
+
+    plt.plot(x, y)
+    plt.show()
