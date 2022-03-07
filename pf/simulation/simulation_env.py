@@ -204,7 +204,7 @@ class SimulationEnv:
                 torch.from_numpy(np.array([self.get_distance(-1)]).astype(np.float32)),
                 setting,
             )
-            estimate, weights, particles, _ = self.dpf_(
+            estimate, weights, particles = self.dpf_(
                 norm_measurement,
                 norm_beacon_pos,
             )
