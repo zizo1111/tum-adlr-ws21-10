@@ -86,7 +86,7 @@ def run_diff_filter(test_path=None):
         motion_model=dynamics_model,
         observation_model=observation_model,
     )
-    path = "saved_models/saved_model.pth"
+    path = "saved_models/saved_model_final_presentation_mse_loss.pth"
     pf_model.load_state_dict(torch.load(path))
     pf_model.init_beliefs()
     pf_model.eval()

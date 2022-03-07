@@ -37,16 +37,6 @@ class DiffParticleFilter(nn.Module):
 
         self.log_prob = log_prob
 
-        M = self.hparams["num_particles"]
-        state_dim = self.hparams["state_dimension"]
-        self.component_covariances = nn.Parameter(  # learnable covariance matrices of GMM
-            (
-                torch.rand(M, state_dim)
-                + torch.full((M, state_dim), 1e-9, dtype=torch.float32)
-            ),
-            requires_grad=True,
-        )
-
     def init_beliefs(self):
         """
         Sample particle states from a GMM, and assign a new set of uniform weights.
@@ -56,10 +46,6 @@ class DiffParticleFilter(nn.Module):
         M = self.hparams["num_particles"]
         state_dim = self.hparams["state_dimension"]
 
-        self.component_covariances.data = torch.clamp(
-            self.component_covariances.data, min=10e-9
-        )  # covariance must remain positive for each new sequence initialization
-
         # Sample particles as GMM
         mix = D.Categorical(torch.ones(M,))
         comp = D.Independent(
@@ -67,7 +53,8 @@ class DiffParticleFilter(nn.Module):
                 torch.hstack(
                     ((torch.rand(M, 2) * 2) - 1, torch.randn(M, state_dim - 2))
                 ),
-                self.component_covariances,
+                torch.rand(M, state_dim)
+                + torch.full((M, state_dim), 1e-9, dtype=torch.float32),
             ),
             1,
         )

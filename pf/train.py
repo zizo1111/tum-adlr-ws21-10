@@ -308,7 +308,7 @@ def train(
             print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
 
     EPOCHS = 100
-    loss_fn = NLL
+    loss_fn = MSE
     assert loss_fn in losses
 
     pf_model = DiffParticleFilter(
