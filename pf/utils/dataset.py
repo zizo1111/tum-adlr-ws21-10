@@ -268,15 +268,3 @@ class PFSampler(Sampler):
             for i in range(len(split_given_size(indices, self.batch_size))):
                 ret.extend(list(alt_chain(*([list(seq) for seq in split_indices[i]]))))
             return iter(ret)
-
-
-# TODO
-# incorporate mode in model?
-# fix constant sequence length
-#
-# if __name__ == "__main__":
-# set = DatasetSeq(create=True)
-# set.save_dataset()
-
-# set = DatasetSeq()
-# set.load_dataset()

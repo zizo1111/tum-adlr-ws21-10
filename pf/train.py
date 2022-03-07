@@ -19,8 +19,6 @@ def train_epoch(
     last_loss = 0.0
     loss = torch.zeros(size=[])
     seq_len = train_set_settings["sequence_length"]
-    # save video
-    # animator = None
 
     for i, data in enumerate(train_loader):
         if i % seq_len == 0:
@@ -38,9 +36,7 @@ def train_epoch(
         )
 
         # Make predictions for this batch
-        estimate, weights, particles_states = model(
-            norm_measurement, norm_beacon_pos
-        )
+        estimate, weights, particles_states = model(norm_measurement, norm_beacon_pos)
 
         # Compute the loss and its gradients
         N = state.shape[0]  # batch_size
@@ -56,24 +52,8 @@ def train_epoch(
                 covariance=model.component_covariances,
             )
 
-        # save video
-        # env_size = setting["env_size"].clone().detach().numpy()[0]
-        # beac_pos = setting["beacons_pos"].clone().detach().numpy()[0]
-        # st = state_reshaped.clone().detach().numpy()[0].reshape(1, 4)
-        # unnorm_est, unorm_particles = unnormalize_estimate(
-        #     estimate.clone().detach(), particles_states.clone().detach(), env_size
-        # )
-        # if epoch == 499:
-        #     if animator is None:
-        #         animator = Animator(env_size, beac_pos, show=False, save_video=True)
-        #     particles_st = unorm_particles[0]
-        #     est = unnorm_est[0].reshape(1, 4)
-        #     _ = animator.set_data(st, estimate=est, particles=particles_st)
         running_loss += loss.item()
         if i % seq_len == seq_len - 1:
-            # save video
-            # if epoch == 499:
-            #     animator.out.release()
             loss /= seq_len
             loss.backward()
             # Adjust learning weights
@@ -127,9 +107,7 @@ def val_epoch(val_loader, model, loss_fn, val_set_settings, writer, epoch):
         )
 
         # Make predictions for this batch
-        estimate, weights, particles_states = model(
-            norm_measurement, norm_beacon_pos
-        )
+        estimate, weights, particles_states = model(norm_measurement, norm_beacon_pos)
 
         # Compute the loss and its gradients
         N = state.shape[0]  # batch_size
@@ -280,6 +258,7 @@ def train(
         "env_size": env_size,
         "soft_resample_alpha": 0.7,
         "batch_size": 8,
+        "lr_decay": False,
     }
 
     sampler = PFSampler(train_set, hparams["batch_size"])
@@ -315,7 +294,7 @@ def train(
         optimizer = torch.optim.Adam(dynamics_model.parameters(), lr=1.0e-3)
         dynamics_model.to(device)
         dynamics_model.train(True)
-        PRE_EPOCHS = 20
+        PRE_EPOCHS = 5
         for i in range(PRE_EPOCHS):
             epoch_loss, dynamics_model = pretrain_motion_epoch(
                 train_dataloader,
@@ -328,7 +307,6 @@ def train(
             )
             print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
 
-    # return
     EPOCHS = 100
     loss_fn = NLL
     assert loss_fn in losses
@@ -342,22 +320,21 @@ def train(
     print(pf_model)
     pf_model.to(device)
 
-    if pretrain_motion and fix_weights:  # fix weights of dynamics model
+    if pretrain_motion and fix_weights:
+        # fix weights of dynamics model
         dynamics_model.train(False)
         observation_model.train(True)
-
         optimizer = torch.optim.Adam(observation_model.parameters(), lr=1.0e-4)
     else:
         pf_model.train(True)
-
-        optimizer = torch.optim.Adam(
-            pf_model.parameters(), lr=5.0e-4
-        )  # TODO: `weight_decay=1.0e-2` also showed good results
-        decayRate = 0.98
-        my_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            optimizer=optimizer, gamma=decayRate
-        )
-    patience = 5
+        # `weight_decay=1.0e-2` also showed good results
+        optimizer = torch.optim.Adam(pf_model.parameters(), lr=5.0e-4)
+        if hparams["lr_decay"]:
+            decayRate = 0.98
+            my_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                optimizer=optimizer, gamma=decayRate
+            )
+    patience = 3
     curr_patience = 0
     last_loss = 1e8
     state_dict = None
@@ -374,8 +351,10 @@ def train(
         )
         print("Epoch {}, loss: {}".format(i + 1, epoch_loss))
 
-        if i % 2 == 0 and i > 0:
-            my_lr_scheduler.step()
+        if hparams["lr_decay"]:
+            if i % 2 == 0 and i > 0:
+                my_lr_scheduler.step()
+
         if val_set:
             epoch_loss_val = val_epoch(
                 val_dataloader,

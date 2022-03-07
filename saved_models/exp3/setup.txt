@@ -1,0 +1,17 @@
+learnable cov
+optimizer = Adam
+lr=5.0e-4 
+MAX_EPOCHS = 100
+EPOCH= 14
+loss_fn = NLL
+PRE_EPOCHS = 10
+"soft_resample_alpha": 0.7,
+"batch_size": 8,
+state_dim = 4
+env_size = 200
+mode = "collide"
+num_discs = 1
+num_particles = 500
+num_beacons = 2
+pretrain_motion=True
+fix_weights=False

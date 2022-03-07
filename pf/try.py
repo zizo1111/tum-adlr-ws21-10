@@ -55,10 +55,10 @@ def run_diff_filter(test_path=None):
     mode = "collide"
     num_discs = 1
     # PF config #
-    num_particles = 1000
+    num_particles = 500
 
     # beacons config #
-    num_beacons = 2
+    num_beacons = 1
 
     dynamics_model = MotionModel(
         state_dimension=state_dim,
@@ -108,9 +108,9 @@ def run_diff_filter(test_path=None):
         set.load_dataset(test_path)
 
 
-def create_dataset():
+def create_dataset(path=None):
     set = DatasetSeq(create=True)
-    set.save_dataset()
+    set.save_dataset(path)
 
 
 def load_dataset(path=None):
@@ -123,3 +123,4 @@ def load_dataset(path=None):
 if __name__ == "__main__":
     # run_filter()
     run_diff_filter()
+    # create_dataset()

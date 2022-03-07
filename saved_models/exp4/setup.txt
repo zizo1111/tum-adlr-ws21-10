@@ -1,0 +1,21 @@
+learnable cov
+noise_std = 1
+optimizer = Adam
+lr=5.0e-4 
+MAX_EPOCHS = 100
+EPOCH=
+loss_fn = NLL
+PRE_EPOCHS = 10
+"soft_resample_alpha": 0.7,
+"batch_size": 8,
+state_dim = 4
+env_size = 200
+mode = "collide"
+num_discs = 1
+num_particles = 500
+num_beacons = 1
+beacon_pos = [0,100]
+pretrain_motion=True
+fix_weights=False
+train_set = datasets/cov_dataset.npy
+val_set = datasets/cov_dataset_val.npy
