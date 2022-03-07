@@ -50,7 +50,7 @@ class SimulationEnv:
 
             # Error propagation
             self.timesteps = 0
-            self.mse = 0
+            self.rmse = 0
 
         self.dpf_ = None
         if dp_filter:
@@ -223,13 +223,13 @@ class SimulationEnv:
 
     def _compute_error(self):
         """
-        Computes the error (MSE) at each timestep
-        Note: The error is not averaged over all timesteps!
+        Computes the sum of squared Euclidean errors for all previous timesteps
+        Note: The error is not averaged
 
-        :return: MSE at each timestep
+        :return: sum of squared errors
         """
-        self.mse += np.linalg.norm(
-            self.discs_[0] - self.estimate_
+        self.rmse += np.linalg.norm(
+            self.discs_[0] - self.estimate_[0]
         )  # 0th disc is always predicted
         self.timesteps += 1
 
@@ -287,11 +287,14 @@ class SimulationEnv:
 
     def get_error(self):
         """
-        Returns overall error (MSE)
+        Returns overall error (RMSE)
 
-        :return: current MSE, averaged over all timesteps
+        :return: current RMSE, averaged over all timesteps
         """
-        return self.mse / self.timesteps
+        return np.sqrt(self.rmse / self.timesteps)
+
+    def get_timestep(self):
+        return self.timesteps
 
     def get_setup(self):
         """
